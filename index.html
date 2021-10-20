@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html data-protected="all">
+    <head>
+        <title>Webstrate Package Manager v2</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="WPMv2.js" type="text/javascript"></script>
+
+        <style>
+            iframe {
+                flex-grow: 1;
+                margin: 1em;
+                border: 1px solid blue;
+            }
+            
+            #playarea {
+                flex-grow: 1;
+                display: flex;
+                flex-direction: column;
+            }
+            
+            #playarea transient {
+                flex-grow: 1;
+                display: block;
+                height: 100%;
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+            }
+            
+            body {
+                display: flex;
+                flex-direction: column;
+            }
+            
+            html, body {
+                height: 100vh;
+                margin: 0;
+                padding: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Webstrate Package Manager v2</h1>
+        
+        <div>
+            <button id="installCNB">Install CNB</button>
+            <button id="installCNBInitiator">Install CNB Initiator</button>
+            <button id="installAffinity">Install AffinityDiagrams</button>
+            <button id="installRecollect">Install Recollect</button>
+            <button id="installPlaced">Install Placed</button>
+            <button id="installPlacedExplorer">Install Placed Explorer</button>
+            <button id="installPlacedCreator">Install Placed Creator</button>
+            <button id="installCodestrates">Install codestrates</button>
+            <button id="installLazyTA">Install LazyTA</button>
+            <button id="installWhenJS">Install When.js</button>
+            <button id="installWhenJSNoB">Install When.js NoB</button>
+            <button id="popOut">Popout</button>
+        </div>
+        
+        <div id="playarea"></div>
+        
+        <script>
+            async function makeIframeProtected() {
+                let iframe = document.querySelector("iframe");
+
+                let oldSrc = iframe.contentWindow.location.pathname;
+                let parentNode = iframe.parentNode;
+
+                //Enable protected
+                iframe.contentDocument.querySelector("html").setAttribute("data-protected", "all");
+                
+                await iframe.contentWindow.webstrate.dataSaved();
+                //Wait for dataSaved to be finished.
+                await new Promise((resolve)=>{
+                    setTimeout(()=>{
+                        resolve();
+                    }, 0);
+                });                
+                
+                parentNode.removeChild(iframe);
+                
+                iframe = document.createElement("iframe");
+                iframe.src = oldSrc;
+                
+                let promise = new Promise((resolve, reject)=>{
+                    iframe.webstrate.on("transcluded", function oneshot(webstrateId) {
+                        iframe.webstrate.off("transcluded", oneshot);
+                        resolve();
+                    });
+                });
+
+                parentNode.appendChild(iframe);
+                
+                await promise;
+            }
+            
+            async function setupCNBDiv() {
+                let iframe = document.querySelector("iframe");
+
+                let boardDiv = document.createElement("div");
+                boardDiv.setAttribute("id", "boarddiv");
+                boardDiv.style.width = "100%";
+                boardDiv.style.height = "100%";
+                boardDiv.style.position = "fixed";
+                boardDiv.style.top = "0";
+                boardDiv.style.left = "0";
+                
+                iframe.contentDocument.querySelector("body").appendChild(boardDiv);
+                WPMv2.stripProtection(boardDiv);
+                
+                await iframe.contentWindow.webstrate.dataSaved();
+                //Wait for dataSaved to be finished.
+                await new Promise((resolve)=>{
+                    setTimeout(()=>{
+                        resolve();
+                    }, 0);
+                });                
+            }
+            
+            document.querySelector("#popOut").addEventListener("click", () => {
+                let iframe = document.querySelector("iframe");
+
+                window.open(iframe.contentWindow.location.pathname, "_blank");
+            });
+            
+            async function installApp(bootstrapCode) {
+                await makeIframeProtected();
+                
+                let iframe = document.querySelector("iframe");
+                
+                let bootstrapScript = document.createElement("script");
+                
+                let hiderCode = `
+                    (async ()=>{
+                        document.body.style.display = "none";
+                        ${bootstrapCode}
+                        document.body.style.display = "";
+                    })();
+                `;
+                
+                bootstrapScript.textContent = hiderCode;
+                bootstrapScript.setAttribute("type", "disabled");
+                bootstrapScript.id = "wpm-bootstrapScript";
+                
+                WPMv2.stripProtection(bootstrapScript);
+                
+                iframe.contentDocument.querySelector("head").appendChild(bootstrapScript);
+                
+                bootstrapScript.removeAttribute("type");
+
+                await iframe.contentWindow.webstrate.dataSaved();
+                //Wait for dataSaved to be finished.
+                await new Promise((resolve)=>{
+                    setTimeout(()=>{
+                        resolve();
+                    }, 0);
+                });                
+                
+                console.log("Running eval on bootstrapcode...");
+                
+                iframe.contentWindow.eval.call(null, bootstrapScript.textContent);
+            }
+            
+            document.querySelector("#installCodestrates").addEventListener("click", async () => {
+                await installApp(`
+                window.linearEditor = ()=>{
+                    WPMv2.requireAll("/lineareditor-repos?raw");
+                }
+        
+                window.cauldronEditor = async ()=>{
+                    if(typeof Cauldron === "undefined") {
+                        await WPMv2.requireAll("/cauldron-repos?raw");
+                    }
+
+                    if(typeof myPrettyCauldronEditor === "undefined") {
+                        window.myPrettyCauldronEditor = new Cauldron.Cauldron();
+                    }
+
+                    myPrettyCauldronEditor.open();
+                }
+
+                await WPMv2.require({
+                    repository: "/codestrates-repos?raw", package: "codestrates_meta"
+                });
+                `);
+            });
+
+            document.querySelector("#installLazyTA").addEventListener("click", async () => {
+                
+                let iframe = document.querySelector("iframe");
+                iframe.contentDocument.querySelector("body").classList.add("ta-white-theme");
+                WPMv2.stripProtection(iframe.contentDocument.querySelector("body"));
+                
+                await iframe.contentWindow.webstrate.dataSaved();
+                //Wait for dataSaved to be finished.
+                await new Promise((resolve)=>{
+                    setTimeout(()=>{
+                        resolve();
+                    }, 0);
+                });                
+                
+                await installApp(`
+                window.linearEditor = ()=>{
+                    WPMv2.requireAll("/lineareditor-repos?raw");
+                }
+        
+                await WPMv2.requireAll("/lazyta-repos?raw");
+                `);
+            });
+
+            document.querySelector("#installCNB").addEventListener("click", async () => {
+                await setupCNBDiv();
+                
+                await installApp(`
+                await WPMv2.require({repository:"/cnb-repos?raw", package: "cnb_meta"});
+                `);
+            });
+            
+            document.querySelector("#installAffinity").addEventListener("click", async () => {
+                await setupCNBDiv();
+                
+                await installApp(`
+                await WPMv2.require({repository:"/cnb-repos?raw", package: "affinity_diagram_meta"});
+                `);
+            });     
+            
+            document.querySelector("#installRecollect").addEventListener("click", async () => {
+                await setupCNBDiv();
+                
+                await installApp(`
+                await WPMv2.require({repository:"/cnb-repos?raw", package: "recollect_meta"});
+                `);
+            });                
+
+            document.querySelector("#installCNBInitiator").addEventListener("click", async () => {
+                await setupCNBDiv();
+                
+                await installApp(`
+                await WPMv2.require([
+                    {repository:"/cnb-repos?raw", package: "initiator_plugin_autogenerate"},
+                    {repository:"/cnb-repos?raw", package: "initiator_plugin_recent_boards"},
+                    {repository:"/cnb-repos?raw", package: "initiator_plugin_search_boardlist"}
+                ]);
+                `);
+            });
+
+            document.querySelector("#installPlaced").addEventListener("click", async () => {
+                let iframe = document.querySelector("iframe");
+
+                iframe.contentDocument.querySelector("html").setAttribute("data-stub", "true");
+                
+                await iframe.contentWindow.webstrate.dataSaved();
+                //Wait for dataSaved to be finished.
+                await new Promise((resolve)=>{
+                    setTimeout(()=>{
+                        resolve();
+                    }, 0);
+                });                
+                
+                await installApp(`
+                await WPMv2.requireAll("/placed-repos?raw", {blacklist: ["placed_creator"]});
+                `);
+            });
+
+            document.querySelector("#installPlacedExplorer").addEventListener("click", async () => {
+                let iframe = document.querySelector("iframe");
+
+                await iframe.contentWindow.webstrate.dataSaved();
+                //Wait for dataSaved to be finished.
+                await new Promise((resolve)=>{
+                    setTimeout(()=>{
+                        resolve();
+                    }, 0);
+                });
+
+                await installApp(`
+                await WPMv2.requireAll("/placed-explore-repos?raw");
+                `);
+            });
+
+            document.querySelector("#installPlacedCreator").addEventListener("click", async () => {
+                await installApp(`
+                await WPMv2.require({repository:"/placed-repos?raw", package: "placed_creator"});
+                `);
+            });
+
+            document.querySelector("#installWhenJS").addEventListener("click", async () => {
+                await installApp(`
+                await WPMv2.requireAll("/when-js-repos?raw");
+                `);
+            });
+            
+            document.querySelector("#installWhenJSNoB").addEventListener("click", async () => {
+                await installApp(`
+                await WPMv2.require({package: "meta-nonbrowser", repository: "/when-js-repos?raw"});
+                `);
+            });            
+
+            webstrate.on("loaded", function () {
+                let iframe = document.createElement("iframe");
+
+                let transient = document.createElement("transient");
+
+                document.querySelector("#playarea").appendChild(transient);
+
+                transient.appendChild(iframe);
+
+                document.addEventListener("touchmove", function(evt) {
+                    evt.preventDefault();
+                }, {passive: false});
+
+                document.addEventListener("gesturestart", function(evt) {
+                    evt.preventDefault();
+                });
+
+                iframe.webstrate.on("transcluded", async function oneshot(webstrateId) {
+                    iframe.webstrate.off("transcluded", oneshot);
+
+                    console.log("Webstrate is ready!");
+                    
+                    iframe.contentDocument.head.insertAdjacentHTML("afterbegin", "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>");
+                    
+                    WPMv2.installWPMInto(iframe);
+                    await iframe.contentWindow.webstrate.dataSaved();
+                    //Wait for dataSaved to be finished.
+                    await new Promise((resolve)=>{
+                        setTimeout(()=>{
+                            resolve();
+                        }, 0);
+                    });                
+                    
+                    console.log("WPMv2 installed into iframe: ", webstrateId);
+                });
+                
+                iframe.src = "/new";
+            });
+        </script>
+    </body>
+</html>
