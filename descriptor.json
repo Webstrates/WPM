@@ -1,0 +1,8 @@
+{
+    "description": "Webstrate Package Manager",
+    "dependencies": [
+    ],
+    "license": "Apache 2.0",
+    "assets": [],
+    "version": "2.22"
+}
