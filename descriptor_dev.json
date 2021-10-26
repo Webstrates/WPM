@@ -1,0 +1,9 @@
+{
+    "description": "Webstrate Package Manager (live from Github)",
+    "dependencies": [
+    ],
+    "license": "Apache 2.0",
+    "assets": [],
+    "version": "Development",
+    "forceEmbedding": true
+}
