@@ -41,7 +41,6 @@
      */
     class WPMv2 {
         static async bootstrap(packageDom, options, requireToken, triggerOnPackageInstalled = false) {
-            console.log("Booting ", packageDom);
             let wpmPackage = WPMv2.getWPMPackageFromDOM(packageDom);
             let promises = [];
             let alreadyLoadedExternals = new Set();
@@ -393,7 +392,6 @@
          */
         static async findAllDependencies(pkg) {
             let dependencies = [];
-            console.log(pkg);
 
             for(let dependencyEntry of pkg.dependencyMap) {
                 let dependencySpec = new WPMPackage(dependencyEntry[0], dependencyEntry[1]);
@@ -560,10 +558,6 @@
                 }
             }
             console.timeEnd("Resolving package dependencies:");
-
-
-            console.log(resolvedPackages);
-
 
             const sortedPackages = [];
             const lookedUpPackages = resolvedPackages;
@@ -1313,7 +1307,7 @@
         getCurrentlyInstalledPackages: WPMv2.getCurrentlyInstalledPackages,
         getLatestPackageFromPackage: WPMv2.getLatestPackageFromPackage,
         version: 2.23,
-        revision: "$Id: WPMv2.js 824 2022-02-03 11:06:50Z au182811@uni.au.dk $"
+        revision: "$Id: WPMv2.js 825 2022-02-03 14:30:56Z au182811@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
