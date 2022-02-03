@@ -204,7 +204,7 @@
                 //Disable sourcemap
 
                 styleContent = styleContent.replace(/\/\*#\s*sourceMappingURL=\S+\s*\*\//, "");
-                styleContent = styleContent.replace(/\/\/#\s*sourceMappingURL=\S+/, "");
+                //styleContent = styleContent.replace(/\/\/#\s*sourceMappingURL=\S+/, "");
 
                 style.innerHTML = styleContent;
 
@@ -221,7 +221,7 @@
                 }
 
                 //Disable sourcemap
-                scriptContent = scriptContent.replace(/\/\*#\s*sourceMappingURL=\S+\s*\*\//, "");
+                //scriptContent = scriptContent.replace(/\/\*#\s*sourceMappingURL=\S+\s*\*\//, "");
                 scriptContent = scriptContent.replace(/\/\/# sourceMappingURL=\S+/, "");
 
                 eval.call(null, scriptContent);
@@ -1312,8 +1312,8 @@
         getPackagesFromRepository: WPMv2.getPackagesFromRepository,
         getCurrentlyInstalledPackages: WPMv2.getCurrentlyInstalledPackages,
         getLatestPackageFromPackage: WPMv2.getLatestPackageFromPackage,
-        version: 2.22,
-        revision: "$Id: WPMv2.js 812 2021-10-26 11:35:55Z au182865@uni.au.dk $"
+        version: 2.23,
+        revision: "$Id: WPMv2.js 824 2022-02-03 11:06:50Z au182811@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
