@@ -385,25 +385,168 @@
          */
 
         /**
+         *
+         * @param {WPMv2.WPMPackage[]}packages
+         * @returns {Promise<void>}
+         */
+        static async findCompletePackageTreeSorted(packages = [], defaultOptions, overrideOptions = {}) {
+            const numPackages = packages.length;
+
+            if (!Array.isArray(packages)) {
+                packages = [packages];
+            }
+
+            let convertedPackages = [];
+
+            async function addRepo(repoUrl, options) {
+                if(overrideOptions.repository != null) {
+                    console.warn("Adding a full repository, does not atm support overriding options for repository...");
+                }
+                let packages = await WPMv2.getPackagesFromRepository(repoUrl);
+                for(let pkg of packages) {
+                    if(options != null) {
+                        pkg.updateFromOptions(options);
+                    }
+                    await addPackage(pkg);
+                }
+            }
+
+            async function addPackage(wpmPackage) {
+                if(!WPMv2.hasPackage(convertedPackages, wpmPackage)) {
+                    wpmPackage = await WPMv2.getLatestPackageFromPackage(wpmPackage);
+                    let dependencies = await WPMv2.findAllDependencies(wpmPackage);
+
+                    for(let dependency of dependencies) {
+                        await addPackage(dependency);
+                    }
+                    convertedPackages.push(wpmPackage);
+                }
+            }
+
+            console.time("Finding Packages:");
+            for(let pkg of packages) {
+                let wpmPackage = null;
+                if (pkg instanceof WPMPackage) {
+                    //Already a WPMPackage
+                    wpmPackage = pkg;
+                    wpmPackage.updateFromOptions(overrideOptions);
+                } else if(typeof pkg === "string") {
+                    if(pkg.startsWith("http") || (pkg.startsWith("/") && pkg.indexOf(" ") === 0)) {
+                        //Full repository, http(s)://myrepourl or /my-relative-url
+                        await addRepo(pkg);
+                    } else {
+                        //Single package, name or including repository
+                        let split = pkg.split(" ");
+
+                        if(split.length === 1) {
+                            //Single local package
+                            let options = Object.assign({}, defaultOptions, {
+                                "package": split[0]
+                            }, overrideOptions);
+                            wpmPackage = new WPMPackage(options.package, options.repository);
+                            wpmPackage.updateFromOptions(options);
+                        } else if(split.length === 2) {
+                            //Single package from given repository
+                            let options = Object.assign({}, defaultOptions, {
+                                "package": split[1].replace("#", ""),
+                                "repository": split[0]
+                            }, overrideOptions);
+                            wpmPackage = new WPMPackage(options.package, options.repository);
+                            wpmPackage.updateFromOptions(options);
+                        } else {
+                            console.warn("Unable to parse package from string:", pkg);
+                        }
+                    }
+                } else {
+                    if(pkg.repository != null && pkg.package != null) {
+                        //Full package, add
+                        let options = Object.assign({}, defaultOptions, pkg, overrideOptions);
+                        wpmPackage = new WPMPackage(options.package, options.repository);
+                        wpmPackage.updateFromOptions(options);
+                    } else if(pkg.repository != null) {
+                        //Full repo, add all
+                        await addRepo(pkg.repository, pkg);
+                    }
+                }
+
+                if(wpmPackage != null) {
+                    await addPackage(wpmPackage);
+                } else {
+                    console.log("Was null:", pkg);
+                }
+            }
+            console.timeEnd("Finding Packages:");
+
+            const sortedPackages = [];
+            let lastLength = convertedPackages.length;
+            console.time("Sorting:");
+            while(convertedPackages.length > 0) {
+                let packagesWithDependenciesInstalled = convertedPackages.filter((pkg)=>{
+                    let ready = true;
+
+                    for(let dep of pkg.dependencyMap) {
+                        //If any dependency is not sorted to be installed yet, this is not ready
+                        if(!WPMv2.hasPackage(sortedPackages, {"package": dep[0]})) {
+                            ready = false;
+                            break;
+                        }
+                    }
+                    for(let dep of pkg.optionalDependencyMap) {
+                        //If not already sorted to be installed, and among packages to install, this is not ready yet
+                        if(!WPMv2.hasPackage(sortedPackages, {"package": dep[0]}) && WPMv2.hasPackage(convertedPackages, {"package": dep[0]})) {
+                            ready = false;
+                            break;
+                        }
+                    }
+
+                    return ready;
+                });
+
+                packagesWithDependenciesInstalled.forEach((pkg)=>{
+                    sortedPackages.push(pkg);
+                    convertedPackages.splice(convertedPackages.indexOf(pkg), 1);
+                });
+
+                if(convertedPackages.length === lastLength) {
+                    console.warn("Not able to add any more packages:", convertedPackages);
+                    break;
+                }
+                lastLength = convertedPackages.length;
+            }
+            console.timeEnd("Sorting:");
+
+            console.groupCollapsed("Simulating install to test sort");
+            let installed = [];
+            for(let pkg of sortedPackages) {
+                pkg.dependencyMap.forEach((repo, pkgName)=>{
+                    if(!installed.includes(pkgName)) {
+                        console.warn("Missing dependency: ", pkgName);
+                    }
+                });
+                pkg.optionalDependencyMap.forEach((repo, pkgName)=>{
+                    if(!installed.includes(pkgName) && WPMv2.hasPackage(sortedPackages, {"package": pkgName})) {
+                        console.warn("Optional dependency marked for install, but not installed yet:", pkgName,"optional for", pkg.name);
+                    }
+                });
+                installed.push(pkg.name);
+            }
+            console.groupEnd();
+
+            return sortedPackages;
+        }
+
+        /**
          * Finds all dependencies of a package
          * @param pkg
-         * @returns {Promise<*[]>}
+         * @returns {Promise<WPMv2.WPMPackage[]>}
          * @private
          */
         static async findAllDependencies(pkg) {
             let dependencies = [];
 
             for(let dependencyEntry of pkg.dependencyMap) {
-                let dependencySpec = new WPMPackage(dependencyEntry[0], dependencyEntry[1]);
-                let localDOM = dependencySpec.getLocalDOM();
-                if (localDOM){
-                    // Already embedded
-                    dependencies.push(WPMv2.getWPMPackageFromDOM(localDOM));
-                } else {
-                    // Resides in a repository somewhere
-                    let remoteDependency = await WPMv2.getLatestPackageFromPackage(dependencySpec);
-                    dependencies.push(remoteDependency);
-                }
+                let dependency = new WPMPackage(dependencyEntry[0], dependencyEntry[1]);
+                dependencies.push(dependency);
             }
 
             return dependencies;
@@ -413,7 +556,7 @@
          * Checks if the given array, contains the given package
          * @private
          */
-        static containsPackage(packages, searchPackage) {
+        static hasPackage(packages, searchPackage) {
             return packages.find((pkg)=>{
                 let pkgName = null;
                 let searchPackageName = null;
@@ -444,7 +587,7 @@
 
         /**
          * Installs the given packages into the current document
-         * 
+         *
          * Override options set in overrideOptions, override the options given in packages.
          *
          * @example
@@ -454,168 +597,20 @@
          * @param {WPMv2~PackageOptions} overrideOptions - options to use for overriding packages options, also applies for dependencies
          * @returns {Promise<void>} - Resolves when the packages are done installing
          */
-        static async require(packages = [], overrideOptions = {}, givenRequireToken = null) {                       
+        static async require(packages = [], overrideOptions = {}, givenRequireToken = null) {
+            const defaultOptions = {
+                repository: WPMv2.getLocalRepositoryURL(),
+                appendMethod: "append",
+                appendTarget: null
+            };
+
             //Make sure we dont override package
-            if (overrideOptions.package){
-                console.warn("FIXME: overrideOptions.package?");
+            if(overrideOptions.hasOwnProperty("package")) {
+                console.warn("Overriding package...", overrideOptions);
                 delete overrideOptions.package;
             }
-            
-            let perPackageOverrideOptions = new Map();
-                        
-            if (!Array.isArray(packages)) {
-                packages = [packages];
-            }
 
-            let resolvedPackages = [];
-            async function addRepo(repoUrl, localOverrides=false) {
-                if(overrideOptions.repository != null) {
-                    console.warn("Adding a full repository, does not atm support overriding options for repository...");
-                }
-                let packages = await WPMv2.getPackagesFromRepository(repoUrl);
-                for(let pkg of packages) {
-                    if (localOverrides){
-                        await resolvePackage(pkg, localOverrides);
-                    } else {
-                        await resolvePackage(pkg);
-                    }
-                }
-            }
-            
-            async function resolvePackage(pkg, localOverrides=false){
-                if (localOverrides) {
-                    pushPerPackageOverride(pkg.name, localOverrides);
-                }
-
-                if(!WPMv2.containsPackage(resolvedPackages, pkg)) {
-                    let localDOM = pkg.getLocalDOM();
-                    if (localDOM){
-                        // This is already embedded locally, just apply overrides
-                        pkg = WPMv2.getWPMPackageFromDOM(localDOM);
-                        pkg = Object.assign(pkg, getPerPackageOverrides(pkg.name), overrideOptions);
-                    } else {
-                        // This resides in a repository somewhere else
-                        pkg = Object.assign(pkg, getPerPackageOverrides(pkg.name), overrideOptions);
-                        pkg = await WPMv2.getLatestPackageFromPackage(pkg);
-                        pkg = Object.assign(pkg, getPerPackageOverrides(pkg.name), overrideOptions);
-                    }
-
-                    // Also resolve dependencies
-                    let dependencies = await WPMv2.findAllDependencies(pkg);
-                    for(let dependency of dependencies) {                        
-                        await resolvePackage(dependency);
-                    }                        
-
-                    resolvedPackages.push(pkg);
-                }
-            }
-            
-            function getPerPackageOverrides(packageName){
-                if (!perPackageOverrideOptions.has(packageName)){
-                    return {};
-                } else {
-                    return perPackageOverrideOptions.get(packageName);
-                }
-            }
-            
-            function pushPerPackageOverride(packageName, localOverrides){
-                if (!perPackageOverrideOptions.has(packageName)){
-                    perPackageOverrideOptions.set(packageName, {});
-                }
-                let oldOptions = perPackageOverrideOptions.get(packageName);
-                perPackageOverrideOptions.set(Object.assign(oldOptions, localOverrides)); // TODO: Maybe warn if clashing?
-            }
-
-
-            console.time("Resolving package dependencies:");
-            for(let pkg of packages) {
-                if (pkg instanceof WPMPackage) {
-                    // Already a WPMPackage
-                    await resolvePackage(pkg);
-                } else if(typeof pkg === "string") {
-                    if(pkg.startsWith("http") || pkg.startsWith("/")) {
-                        // Add entire repository by URL                         // "https://someurl.com/repository"
-                        await addRepo(pkg);
-                        continue;
-                    } else {
-                        // A local package, not in any repository               // "PackageName"
-                        await resolvePackage(new WPMPackage(pkg, location.href));
-                    }
-                } else if(pkg.repository != null && pkg.package != null) {         // {"package":"...", "repository":"...", ...}
-                    // JSON spec package, everything else than package and repository is per-packet overrides
-                    let perPacketOverrides = Object.assign({}, pkg);
-                    delete perPacketOverrides.repository;
-                    delete perPacketOverrides.packet;
-                    await resolvePackage(new WPMPackage(pkg.package, pkg.repository), perPacketOverrides);
-                } else if(pkg.repository != null) {                         // {repository: "...", ...}
-                    // Add entire repository by URL, everything else than repository is per-packet overrides for only packets in this repository
-                    let perPacketOverrides = Object.assign({}, pkg);
-                    delete perPacketOverrides.repository;
-                    await addRepo(pkg.repository, perPacketOverrides);
-                    continue;
-                } else {
-                    console.log("WPMv2 cannot understand requested package in require():", pkg);
-                }
-            }
-            console.timeEnd("Resolving package dependencies:");
-
-            const sortedPackages = [];
-            const lookedUpPackages = resolvedPackages;
-            let lastLength = lookedUpPackages.length;
-            console.time("Sorting:");
-            while(lookedUpPackages.length > 0) {
-                let packagesWithDependenciesInstalled = lookedUpPackages.filter((pkg)=>{
-                    let ready = true;
-
-                    for(let dep of pkg.dependencyMap) {
-                        //If any dependency is not sorted to be installed yet, this is not ready
-                        if(!WPMv2.containsPackage(sortedPackages, {"package": dep[0]})) {
-                            ready = false;
-                            break;
-                        }
-                    }
-                    for(let dep of pkg.optionalDependencyMap) {
-                        //If not already sorted to be installed, and among packages to install, this is not ready yet
-                        if(!WPMv2.containsPackage(sortedPackages, {"package": dep[0]}) && WPMv2.containsPackage(lookedUpPackages, {"package": dep[0]})) {
-                            ready = false;
-                            break;
-                        }
-                    }
-
-                    return ready;
-                });
-
-                packagesWithDependenciesInstalled.forEach((pkg)=>{
-                    sortedPackages.push(pkg);
-                    lookedUpPackages.splice(lookedUpPackages.indexOf(pkg), 1);
-                });
-
-                if(lookedUpPackages.length === lastLength) {
-                    console.warn("Not able to add any more packages:", lookedUpPackages);
-                    break;
-                }
-                lastLength = lookedUpPackages.length;
-            }
-            console.timeEnd("Sorting:");
-
-            console.groupCollapsed("Simulating install to test sort");
-            let installed = [];
-            for(let pkg of sortedPackages) {
-                pkg.dependencyMap.forEach((repo, pkgName)=>{
-                    if(!installed.includes(pkgName)) {
-                        console.warn("Missing dependency: ", pkgName);
-                    }
-                });
-                pkg.optionalDependencyMap.forEach((repo, pkgName)=>{
-                    if(!installed.includes(pkgName) && WPMv2.containsPackage(sortedPackages, {"package": pkgName})) {
-                        console.warn("Optional dependency marked for install, but not installed yet:", pkgName,"optional for", pkg.name);
-                    }
-                });
-                installed.push(pkg.name);
-            }
-            console.groupEnd();
-
-            const completePackageTreeSorted = sortedPackages;
+            const completePackageTreeSorted = await WPMv2.findCompletePackageTreeSorted(packages, defaultOptions, overrideOptions);
 
             if (packages.length === 0) {
                 return;
@@ -633,45 +628,66 @@
             }
 
             for (let pkg of completePackageTreeSorted) {
+
+                let options = Object.assign({}, defaultOptions, pkg.getPackageOptions(), overrideOptions);
+
+                //Check if package is in dom
+                let packageDom = document.querySelector(".packages .package#" + pkg.name + ", wpm-package#" + pkg.name);
+
                 let alreadyInstalled = false;
 
-                // Check if package is in dom
-                let packageDom = pkg.getLocalDOM();
-                if (!packageDom) {
-                    // We need to fetch and install package to dom
+                let wpmPackage = null;
+
+                let needsAppending = false;
+
+                if (packageDom == null) {
+                    //We need to fetch and install package to dom
                     let fetchedPackageDom = await WPMv2.getPackageDOM(pkg.repository, pkg.name);
 
-                    // Rewrite packageDom to a wpm-package
+                    //Rewrite packageDom to a wpm-package
                     packageDom = document.createElement("wpm-package");
+
                     for (let index = fetchedPackageDom.attributes.length - 1; index > -1; --index) {
                         let attribute = fetchedPackageDom.attributes[index];
-                        packageDom.setAttribute(attribute.name, attribute.value);                    
+                        packageDom.setAttribute(attribute.name, attribute.value);
                     }
-                    
+
                     // Instead of display:none, hide it otherwise due to Chrome bug for SVGs
                     packageDom.style.width = 0;
                     packageDom.style.height = 0;
                     packageDom.style.position = "absolute";
                     packageDom.style.visibility = "hidden";
-                    
-                    
+
                     Array.from(fetchedPackageDom.children).forEach((child) => {
                         packageDom.appendChild(child);
                     });
+
                     WPMv2.stripProtection(packageDom);
 
-                    // Install into page based on options
-                    let appendTarget = pkg.appendTarget;
+                    wpmPackage = WPMv2.getWPMPackageFromDOM(packageDom);
+
+                    needsAppending = true;
+                } else {
+                    wpmPackage = WPMv2.getWPMPackageFromDOM(packageDom);
+                    alreadyInstalled = true;
+                }
+
+                //Install into page
+                if(needsAppending) {
+                    let appendTarget = options.appendTarget;
+
                     if(typeof appendTarget === "string") {
                         appendTarget = document.querySelector(appendTarget);
                     }
-                    if (!appendTarget) {
+
+                    if (appendTarget == null) {
                         appendTarget = document.createElement("div");
                         appendTarget.setAttribute("transient-element", "");
                         appendTarget.setAttribute("transient-wpmid", packageDom.id);
                         document.head.appendChild(appendTarget);
                     }
-                    switch (pkg.appendMethod.toLowerCase()) {
+
+                    switch (options.appendMethod.toLowerCase()) {
                         case "before":
                             appendTarget.parentNode.insertBefore(packageDom, appendTarget);
                             break;
@@ -689,8 +705,8 @@
                     }
 
                     // POST all assets to the target
-                    if (pkg.assets.length > 0) {
-                        let repoAssetsUrl = pkg.repository.substring(0, pkg.repository.indexOf("?")) + "?assets&latest";
+                    if (wpmPackage.assets.length > 0) {
+                        let repoAssetsUrl = wpmPackage.repository.substring(0, wpmPackage.repository.indexOf("?")) + "?assets&latest";
                         let repoAssets = await WPMv2.fetchAssets(repoAssetsUrl);
 
                         let localAssetsUrl = location.pathname + "?assets&latest";
@@ -698,7 +714,7 @@
 
                         let formData = new FormData();
                         let assetPromises = [];
-                        pkg.assets.forEach(function (asset) {
+                        wpmPackage.assets.forEach(function (asset) {
                             //If we already have same filehash of this asset, skip
                             let localAsset = localAssets.get(asset);
                             let repoAsset = repoAssets.get(asset);
@@ -709,7 +725,7 @@
 
                             assetPromises.push(new Promise(async function (resolve, reject) {
                                 // Construct URL
-                                let assetUrl = pkg.repository.substring(0, pkg.repository.indexOf("?"));
+                                let assetUrl = wpmPackage.repository.substring(0, wpmPackage.repository.indexOf("?"));
                                 if (!assetUrl.endsWith("/")) {
                                     assetUrl += "/";
                                 }
@@ -732,19 +748,21 @@
                                 method: "post"
                             });
                         }
-                    }                    
-                } else {
-                    alreadyInstalled = true;
+                    }
                 }
 
-                // Make package live by booting it if it wasn't already
-                if (packageDom.getAttribute("transient-wpm-live")==null) {
+                //Check if package is live
+                if (packageDom.getAttribute("transient-wpm-live") == null) {
+                    //Make package live
                     await WPMv2.bootstrap(packageDom, overrideOptions, requireToken, !alreadyInstalled);
+
                     packageDom.setAttribute("transient-wpm-live", "");
+                } else {
+                    //Already live
                 }
             }
 
-            // Only the first outer call to require, has givenAllInstalledCallbacks set to null
+            //Only the first outer call to require, has givenAllInstalledCallbacks set to null
             if (givenRequireToken === null) {
                 let allInstalledCallbacks = allInstalledCallbacksStack.pop();
                 console.timeEnd(requireTimerId);
@@ -775,7 +793,13 @@
                 if (descriptorDom !== null) {                    
                     try {
                         let packageJson = JSON.parse(descriptorDom.textContent);
-                        return new WPMPackage(name, packageDOM.getAttribute("data-repository"), packageJson);
+                        let repository = packageDOM.getAttribute("data-repository");
+
+                        if(repository == null) {
+                            repository = WPMv2.getLocalRepositoryURL();
+                        }
+
+                        return new WPMPackage(name, repository, packageJson);
                     } catch (e){
                         console.error("Erroneous package descriptor", e, descriptorDom.textContent, packageDOM);
                     }
@@ -785,6 +809,10 @@
             } catch (e) {
                 console.error(e);
             }
+        }
+
+        static getLocalRepositoryURL() {
+            return location.origin + location.pathname + "?raw";
         }
 
         /**
@@ -842,14 +870,12 @@
         static async getLatestPackageFromPackage(p) {
             let packageDOM = await WPMv2.getPackageDOM(p.repository, p.name);
 
-            return WPMv2.getWPMPackageFromDOM(packageDOM);
-        }
-        
-        static async lookupPackage(packageRequest) {
-            let packageDOM = await WPMv2.getPackageDOM(p.repository, p.name);
+            let updatedPackage = WPMv2.getWPMPackageFromDOM(packageDOM);
 
-            return WPMv2.getWPMPackageFromDOM(packageDOM);
-        }        
+            updatedPackage.updateFromOptions(p.getPackageOptions());
+
+            return updatedPackage;
+        }
 
         /**
          * Find all packages at a repository
@@ -1191,19 +1217,33 @@
              * @type {string}
              */
             this.documentationLink = "";
-            
-            this.appendMethod = "append";
-            this.appendTarget = null;
 
             this.dependencyMap = new Map();
             this.optionalDependencyMap = new Map();
 
+            this.appendMethod = "append";
+            this.appendTarget = null;
+
             this.updateFromJson(descriptorJson);
         }
-        
-        getLocalDOM(){
-            return document.querySelector(".packages .package#" + this.name + ", wpm-package#" + this.name);
-        }        
+
+        updateFromOptions(options) {
+            ["appendMethod", "appendTarget", "repository"].forEach((optionProperty)=>{
+                if(options.hasOwnProperty(optionProperty)) {
+                    this[optionProperty] = options[optionProperty];
+                }
+            })
+        }
+
+        getPackageOptions() {
+            let options = {};
+
+            ["appendMethod", "appendTarget", "repository"].forEach((optionProperty)=>{
+                options[optionProperty] = this[optionProperty];
+            });
+
+            return options;
+        }
 
         updateFromJson(packageJson) {
             let self = this;
@@ -1306,8 +1346,8 @@
         getPackagesFromRepository: WPMv2.getPackagesFromRepository,
         getCurrentlyInstalledPackages: WPMv2.getCurrentlyInstalledPackages,
         getLatestPackageFromPackage: WPMv2.getLatestPackageFromPackage,
-        version: 2.23,
-        revision: "$Id: WPMv2.js 825 2022-02-03 14:30:56Z au182811@uni.au.dk $"
+        version: 2.4,
+        revision: "$Id: WPMv2.js 826 2022-02-04 13:49:50Z au182811@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
