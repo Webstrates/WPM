@@ -1347,7 +1347,7 @@
         getCurrentlyInstalledPackages: WPMv2.getCurrentlyInstalledPackages,
         getLatestPackageFromPackage: WPMv2.getLatestPackageFromPackage,
         version: 2.4,
-        revision: "$Id: WPMv2.js 826 2022-02-04 13:49:50Z au182811@uni.au.dk $"
+        revision: "$Id: WPMv2.js 827 2022-03-03 15:05:23Z au182865@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
@@ -1355,11 +1355,13 @@
 })(window);
 
 // Provide bootloader functionality
-document.querySelector("body").setAttribute("transient-wpm2-bootloader", "waiting");
-webstrate.on("loaded", async function wpmv2_bootloader_loader(){
-    document.querySelector("body").setAttribute("transient-wpm2-bootloader", "loading");
+class WPMBoot {
+    static loadedCallbacks = [];
+    static isLoaded = false;
     
-    await async function wpmv2_bootloader(){
+    static async wpmv2_bootloader(){
+        document.querySelector("html").setAttribute("transient-wpm2-bootloader", "loading");
+        
         let bootConfigElement = document.querySelector("head script[type='text/json+bootconfig']");
         if (!bootConfigElement){
             return;
@@ -1383,7 +1385,7 @@ webstrate.on("loaded", async function wpmv2_bootloader_loader(){
             return;
         }
 
-        // Load everything with WPM
+        // Load all required packages with WPM
         for (let requireStep of bootConfig.require){
             if (!(requireStep.dependencies && Array.isArray(requireStep.dependencies))){
                 console.warn("WPM bootloader skipping incorrect requirestep, dependency list is missing", requireStep);
@@ -1396,8 +1398,29 @@ webstrate.on("loaded", async function wpmv2_bootloader_loader(){
                 await WPMv2.require(requireStep.dependencies);
             }
         }
-    }();
-        
-    // Everything is done
-    document.querySelector("body").setAttribute("transient-wpm2-bootloader", "loaded");        
+               
+        // Fire loaded events
+        document.querySelector("html").setAttribute("transient-wpm2-bootloader", "initializing");
+        while (WPMBoot.loadedCallbacks.length>0){
+            let callback = WPMBoot.loadedCallbacks.pop();
+            try {
+                await callback();
+            } catch (ex){
+                console.error("WPMv2 Bootloader exception in WPMBoot.onLoaded(...) callback", ex, callback);
+            }
+        }
+        document.querySelector("html").setAttribute("transient-wpm2-bootloader", "loaded");
+    }
+    
+    static async onLoaded(callback){
+        if (WPMBoot.isLoaded){
+            await callback();
+        } else {
+            WPMBoot.loadedCallbacks.push(callback);
+        }
+    }
+}
+document.querySelector("html").setAttribute("transient-wpm2-bootloader", "waiting");
+webstrate.on("loaded", async function wpmv2_bootloader_loader(){    
+    await WPMBoot.wpmv2_bootloader();
 });
