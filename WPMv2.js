@@ -423,7 +423,6 @@
                 }
             }
 
-            console.time("Finding Packages:");
             for(let pkg of packages) {
                 let wpmPackage = null;
                 if (pkg instanceof WPMPackage) {
@@ -475,11 +474,9 @@
                     console.log("Was null:", pkg);
                 }
             }
-            console.timeEnd("Finding Packages:");
 
             const sortedPackages = [];
             let lastLength = convertedPackages.length;
-            console.time("Sorting:");
             while(convertedPackages.length > 0) {
                 let packagesWithDependenciesInstalled = convertedPackages.filter((pkg)=>{
                     let ready = true;
@@ -513,24 +510,6 @@
                 }
                 lastLength = convertedPackages.length;
             }
-            console.timeEnd("Sorting:");
-
-            console.groupCollapsed("Simulating install to test sort");
-            let installed = [];
-            for(let pkg of sortedPackages) {
-                pkg.dependencyMap.forEach((repo, pkgName)=>{
-                    if(!installed.includes(pkgName)) {
-                        console.warn("Missing dependency: ", pkgName);
-                    }
-                });
-                pkg.optionalDependencyMap.forEach((repo, pkgName)=>{
-                    if(!installed.includes(pkgName) && WPMv2.hasPackage(sortedPackages, {"package": pkgName})) {
-                        console.warn("Optional dependency marked for install, but not installed yet:", pkgName,"optional for", pkg.name);
-                    }
-                });
-                installed.push(pkg.name);
-            }
-            console.groupEnd();
 
             return sortedPackages;
         }
@@ -1347,7 +1326,7 @@
         getCurrentlyInstalledPackages: WPMv2.getCurrentlyInstalledPackages,
         getLatestPackageFromPackage: WPMv2.getLatestPackageFromPackage,
         version: 2.4,
-        revision: "$Id: WPMv2.js 827 2022-03-03 15:05:23Z au182865@uni.au.dk $"
+        revision: "$Id: WPMv2.js 828 2022-03-14 07:19:30Z au182811@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
