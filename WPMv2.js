@@ -1306,7 +1306,7 @@
     });
 
     //Setup attribute "transient-element" that marks a DOM element as transient
-    if(webstrate != null) {
+    if(typeof webstrate !== "undefined") {
         let oldIsTransientElement = webstrate.config.isTransientElement;
         webstrate.config.isTransientElement = (node) => {
             if (node.hasAttribute("transient-element")) {
@@ -1328,7 +1328,7 @@
         getCurrentlyInstalledPackages: WPMv2.getCurrentlyInstalledPackages,
         getLatestPackageFromPackage: WPMv2.getLatestPackageFromPackage,
         version: 2.24,
-        revision: "$Id: WPMv2.js 845 2022-03-28 12:55:52Z au182811@uni.au.dk $"
+        revision: "$Id: WPMv2.js 848 2022-04-19 13:17:37Z au182865@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
@@ -1402,8 +1402,14 @@ class WPMBoot {
     }
 }
 document.querySelector("html").setAttribute("transient-wpm2-bootloader", "waiting");
-if(webstrate != null) {
+if(typeof webstrate  !== "undefined") {
+    // Webstrate mode
     webstrate.on("loaded", async function wpmv2_bootloader_loader() {
+        await WPMBoot.wpmv2_bootloader();
+    });
+} else {
+    // Standalone mode
+    document.addEventListener("DOMContentLoaded", async function(event) {
         await WPMBoot.wpmv2_bootloader();
     });
 }
