@@ -1,4 +1,4 @@
-body[transient-wpm2-bootloader="waiting"], body[transient-wpm2-bootloader="loading"], body[transient-wpm2-bootloader="loaded"] {
+html[transient-wpm2-bootloader="waiting"], html[transient-wpm2-bootloader="loading"], html[transient-wpm2-bootloader="loaded"] {
     @keyframes wpm-bootloader-spin {
         from {transform: translate(-50%,-50%) rotate(0);}
         to {transform: translate(-50%,-50%) rotate(360deg);}

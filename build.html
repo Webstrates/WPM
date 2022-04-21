@@ -1487,7 +1487,7 @@ if(typeof webstrate  !== "undefined") {
     opacity: 0;
     filter: blur(2em); } }
 
-body[transient-wpm2-bootloader="waiting"]:before, body[transient-wpm2-bootloader="loading"]:before, body[transient-wpm2-bootloader="loaded"]:before {
+html[transient-wpm2-bootloader="waiting"]:before, html[transient-wpm2-bootloader="loading"]:before, html[transient-wpm2-bootloader="loaded"]:before {
   animation: wpm-bootloader-spin 1s infinite linear both;
   content: "";
   position: fixed;
@@ -1503,10 +1503,10 @@ body[transient-wpm2-bootloader="waiting"]:before, body[transient-wpm2-bootloader
   box-shadow: 0 0 2em rgba(49, 60, 162, 0.446);
   pointer-events: none; }
 
-body[transient-wpm2-bootloader="waiting"]:not([transient-wpm2-bootloader="loaded"]) > *, body[transient-wpm2-bootloader="loading"]:not([transient-wpm2-bootloader="loaded"]) > *, body[transient-wpm2-bootloader="loaded"]:not([transient-wpm2-bootloader="loaded"]) > * {
+html[transient-wpm2-bootloader="waiting"]:not([transient-wpm2-bootloader="loaded"]) > *, html[transient-wpm2-bootloader="loading"]:not([transient-wpm2-bootloader="loaded"]) > *, html[transient-wpm2-bootloader="loaded"]:not([transient-wpm2-bootloader="loaded"]) > * {
   opacity: 0; }
 
-body[transient-wpm2-bootloader="waiting"][transient-wpm2-bootloader="loaded"]:before, body[transient-wpm2-bootloader="loading"][transient-wpm2-bootloader="loaded"]:before, body[transient-wpm2-bootloader="loaded"][transient-wpm2-bootloader="loaded"]:before {
+html[transient-wpm2-bootloader="waiting"][transient-wpm2-bootloader="loaded"]:before, html[transient-wpm2-bootloader="loading"][transient-wpm2-bootloader="loaded"]:before, html[transient-wpm2-bootloader="loaded"][transient-wpm2-bootloader="loaded"]:before {
   animation: wpm-bootloader-done 1s ease-out both; }
 </style>
 
