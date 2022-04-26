@@ -1231,6 +1231,9 @@
             } else {
                 currentAliases = sessionStorage.getItem(WPM_ALIASES);
             }
+            if (typeof currentAliases !== "object"){
+                currentAliases = {};
+            }
 
             currentAliases[alias] = repository;
 
@@ -1480,7 +1483,7 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         version: 2.26,
-        revision: "$Id: WPMv2.js 894 2022-04-26 10:49:57Z au182865@uni.au.dk $"
+        revision: "$Id: WPMv2.js 895 2022-04-26 11:01:41Z au182865@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
