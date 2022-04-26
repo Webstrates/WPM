@@ -42,6 +42,8 @@
 //Encapsulate WPMv2, so we can decide which methods are public
 ((window) => {
 
+    const WPM_ALIASES = "WPM.repoAliases";
+
     let allInstalledCallbacksStack = [];
 
     /**
@@ -957,26 +959,35 @@
         }
 
         static lookupRepoAlias(alias) {
-            let result = alias;
+            console.groupCollapsed("Alias lookup:", alias);
 
-            //Insert check for actual url alias lookup here
-            const aliasMappings = JSON.parse(localStorage.getItem("WPM.repoAliases"));
-            if(aliasMappings?.hasOwnProperty(alias)) {
-                result = aliasMappings[alias];
+            let localStorageAliases = JSON.parse(localStorage.getItem(WPM_ALIASES));
+            let sessionStorageAliases = JSON.parse(sessionStorage.getItem(WPM_ALIASES));
+
+            if(localStorageAliases?.hasOwnProperty(alias)) {
+                let result = localStorageAliases[alias];
+                console.log("Found localStorageAlias:", result);
+                console.groupEnd();
+                return result;
+            } else if(sessionStorageAliases?.hasOwnProperty(alias)) {
+                let result = sessionStorageAliases[alias];
+                console.log("Found sessionStorageAlias:", result);
+                console.groupEnd();
+                return result;
             } else {
                 //Check if alias might be an url already?
                 if(alias.startsWith("http") || alias.startsWith("/")) {
                     //Probabely an url
-                    result = alias;
-                } else {
-                    //We had no alias, and the alias did not look like an url, try to make it look like old webstrate url: /alias/?raw
-                    result = "/"+alias+"/?raw";
+                    console.log("Alias looks like a complete url");
+                    console.groupEnd()
+                    return alias;
                 }
             }
 
-            console.log("Looking up repository alias:", alias, "->", result);
+            console.log("No registered alias found, and does not look like an url. Trying webstrate and file approach...");
+            console.groupEnd();
 
-            return result;
+            return ["/"+alias+"/?raw", "/"+alias+"/index.html"];
         }
 
         static async fetchDom(url) {
@@ -993,26 +1004,49 @@
                 }
             }
 
-            let response = await fetch(url, {credentials: 'same-origin'});
+            let response = null;
 
-            let documentText = await response.text();
-
-            let parsedDom = WPMv2.parser.parseFromString(documentText, "text/html");
-
-            if(parsedDom.readyState === "loading") {
-                await new Promise((resolve, reject)=>{
-                    parsedDom.addEventListener("DOMContentLoaded", ()=>{
-                        resolve();
-                    });
-                });
+            if(Array.isArray(url)) {
+                for(let u of url) {
+                    try {
+                        response = await fetch(u, {credentials: 'same-origin'});
+                        if(response != null && response.status === 200) {
+                            //We got a correct response, break
+                            break;
+                        }
+                        response = null;
+                    } catch(e) {
+                        //Ignore?
+                        console.warn(e);
+                    }
+                }
+            } else {
+                response = await fetch(url, {credentials: 'same-origin'});
             }
 
-            WPMv2.domCache[url] = {
-                dom: parsedDom,
-                timestamp: Date.now()
-            };
+            if(response != null) {
 
-            return parsedDom;
+                let documentText = await response.text();
+
+                let parsedDom = WPMv2.parser.parseFromString(documentText, "text/html");
+
+                if (parsedDom.readyState === "loading") {
+                    await new Promise((resolve, reject) => {
+                        parsedDom.addEventListener("DOMContentLoaded", () => {
+                            resolve();
+                        });
+                    });
+                }
+
+                WPMv2.domCache[url] = {
+                    dom: parsedDom,
+                    timestamp: Date.now()
+                };
+
+                return parsedDom;
+            } else {
+                console.error("Unable to fetchDOM from: ", url);
+            }
         }
 
         /**
@@ -1183,9 +1217,48 @@
             document.dispatchEvent(eventAny);
         }
 
-        static setRepoAliases(aliases) {
-            console.log("Setting repo aliases to:", aliases);
-            localStorage.setItem("WPM.repoAliases", JSON.stringify(aliases));
+        static registerRepository(alias, repository, useLocalStorage = false) {
+            let currentAliases = {};
+
+            if(useLocalStorage) {
+                currentAliases = localStorage.getItem(WPM_ALIASES);
+            } else {
+                currentAliases = sessionStorage.getItem(WPM_ALIASES);
+            }
+
+            currentAliases[alias] = repository;
+
+            if(useLocalStorage) {
+                localStorage.setItem(WPM_ALIASES, currentAliases);
+            } else {
+                sessionStorage.setItem(WPM_ALIASES, currentAliases);
+            }
+        }
+
+        static unregisterRepository(alias, useLocalStorage = false) {
+            let currentAliases = {};
+
+            if(useLocalStorage) {
+                currentAliases = localStorage.getItem(WPM_ALIASES);
+            } else {
+                currentAliases = sessionStorage.getItem(WPM_ALIASES);
+            }
+
+            delete currentAliases[alias];
+
+            if(useLocalStorage) {
+                localStorage.setItem(WPM_ALIASES, currentAliases);
+            } else {
+                sessionStorage.setItem(WPM_ALIASES, currentAliases);
+            }
+        }
+
+        static clearRegisteredRepositories(useLocalStorage = false) {
+            if(useLocalStorage) {
+                localStorage.setItem(WPM_ALIASES, {});
+            } else {
+                sessionStorage.setItem(WPM_ALIASES, {});
+            }
         }
     }
 
@@ -1388,9 +1461,11 @@
         getPackagesFromRepository: WPMv2.getPackagesFromRepository,
         getCurrentlyInstalledPackages: WPMv2.getCurrentlyInstalledPackages,
         getLatestPackageFromPackage: WPMv2.getLatestPackageFromPackage,
-        setRepoAliases: WPMv2.setRepoAliases,
+        registerRepository: WPMv2.registerRepository,
+        unregisterRepository: WPMv2.unregisterRepository,
+        clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         version: 2.25,
-        revision: "$Id: WPMv2.js 886 2022-04-26 04:58:14Z au182811@uni.au.dk $"
+        revision: "$Id: WPMv2.js 889 2022-04-26 08:08:57Z au182811@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
