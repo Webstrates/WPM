@@ -945,12 +945,12 @@
             let localStorageAliases = {};
             let sessionStorageAliases = {};
             try {
-                JSON.parse(localStorage.getItem(WPM_ALIASES));
+                localStorageAliases = JSON.parse(localStorage.getItem(WPM_ALIASES));
             } catch (ex){
                 console.warn("Unparseable localStorage.repositoryAliases", ex);
             }
             try {
-                JSON.parse(sessionStorage.getItem(WPM_ALIASES));
+                sessionStorageAliases = JSON.parse(sessionStorage.getItem(WPM_ALIASES));
             } catch (ex){
                 console.warn("Unparseable sessionStorage.repositoryAliases", ex);
             }
@@ -1481,7 +1481,7 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         version: 2.26,
-        revision: "$Id: WPMv2.js 899 2022-04-26 11:21:35Z au182865@uni.au.dk $"
+        revision: "$Id: WPMv2.js 900 2022-04-26 11:28:10Z au182865@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
