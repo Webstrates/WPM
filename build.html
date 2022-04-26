@@ -961,8 +961,18 @@
         static lookupRepoAlias(alias) {
             console.groupCollapsed("Alias lookup:", alias);
 
-            let localStorageAliases = JSON.parse(localStorage.getItem(WPM_ALIASES));
-            let sessionStorageAliases = JSON.parse(sessionStorage.getItem(WPM_ALIASES));
+            let localStorageAliases = {};
+            let sessionStorageAliases = {};
+            try {
+                JSON.parse(localStorage.getItem(WPM_ALIASES));
+            } catch (ex){
+                console.warn("Unparseable localStorage.repositoryAliases", ex);
+            }
+            try {
+                JSON.parse(sessionStorage.getItem(WPM_ALIASES));
+            } catch (ex){
+                console.warn("Unparseable sessionStorage.repositoryAliases", ex);
+            }
 
             if(localStorageAliases?.hasOwnProperty(alias)) {
                 let result = localStorageAliases[alias];
@@ -1490,7 +1500,7 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         version: 2.26,
-        revision: "$Id: WPMv2.js 898 2022-04-26 11:17:14Z au182865@uni.au.dk $"
+        revision: "$Id: WPMv2.js 899 2022-04-26 11:21:35Z au182865@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
