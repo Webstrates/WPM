@@ -1205,13 +1205,15 @@
          * @param useLocalStorage If true, the registered alias is registered in localStorage, if not, in sessionStorage
          */
         static registerRepository(alias, repository, useLocalStorage = false) {
-            let currentAliases = {};
+            let currentAliases = null;
 
-            if(useLocalStorage) {
-                currentAliases = localStorage.getItem(WPM_ALIASES);
-            } else {
-                currentAliases = sessionStorage.getItem(WPM_ALIASES);
-            }
+            try {
+                if(useLocalStorage) {
+                    currentAliases = JSON.parse(localStorage.getItem(WPM_ALIASES));
+                } else {
+                    currentAliases = JSON.parse(sessionStorage.getItem(WPM_ALIASES));
+                }
+            } catch (ex){}
             if ((!currentAliases) || typeof currentAliases !== "object"){
                 currentAliases = {};
             }
@@ -1219,9 +1221,9 @@
             currentAliases[alias] = repository;
 
             if(useLocalStorage) {
-                localStorage.setItem(WPM_ALIASES, currentAliases);
+                localStorage.setItem(WPM_ALIASES, JSON.stringify(currentAliases));
             } else {
-                sessionStorage.setItem(WPM_ALIASES, currentAliases);
+                sessionStorage.setItem(WPM_ALIASES, JSON.stringify(currentAliases));
             }
         }
 
@@ -1231,11 +1233,15 @@
          * @param useLocalStorage If true, the alias is removed from localStorage, if not, from sessionStorage
          */
         static unregisterRepository(alias, useLocalStorage = false) {
-            if(useLocalStorage) {
-                currentAliases = localStorage.getItem(WPM_ALIASES);
-            } else {
-                currentAliases = sessionStorage.getItem(WPM_ALIASES);
-            }
+            let currentAliases = null;
+
+            try {
+                if(useLocalStorage) {
+                    currentAliases = JSON.parse(localStorage.getItem(WPM_ALIASES));
+                } else {
+                    currentAliases = JSON.parse(sessionStorage.getItem(WPM_ALIASES));
+                }
+            } catch (ex){}
             if ((!currentAliases) || typeof currentAliases !== "object"){
                 currentAliases = {};
             }
@@ -1243,9 +1249,9 @@
             delete currentAliases[alias];
 
             if(useLocalStorage) {
-                localStorage.setItem(WPM_ALIASES, currentAliases);
+                localStorage.setItem(WPM_ALIASES, JSON.stringify(currentAliases));
             } else {
-                sessionStorage.setItem(WPM_ALIASES, currentAliases);
+                sessionStorage.setItem(WPM_ALIASES, JSON.stringify(currentAliases));
             }
         }
 
@@ -1255,9 +1261,9 @@
          */
         static clearRegisteredRepositories(useLocalStorage = false) {
             if(useLocalStorage) {
-                localStorage.setItem(WPM_ALIASES, {});
+                localStorage.setItem(WPM_ALIASES, "{}");
             } else {
-                sessionStorage.setItem(WPM_ALIASES, {});
+                sessionStorage.setItem(WPM_ALIASES, "{}");
             }
         }
     }
@@ -1465,7 +1471,7 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         version: 2.26,
-        revision: "$Id: WPMv2.js 896 2022-04-26 11:06:40Z au182865@uni.au.dk $"
+        revision: "$Id: WPMv2.js 898 2022-04-26 11:17:14Z au182865@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
