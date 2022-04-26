@@ -429,7 +429,7 @@
                         }
                         convertedPackages.push(wpmPackage);
                     } catch (ex){
-                        console.error("WPMv2 very important error: Could not resolve package. This will probably cause the site to fail horribly! ", wpmPackage);
+                        console.error("WPMv2 very important error: Could not resolve package. This will probably cause the site to fail horribly! ", wpmPackage, ex);
                     }
                 }
             }
@@ -975,10 +975,6 @@
             //Lookup repos aliases
             url = WPMv2.lookupRepoAlias(url);
 
-            if(url.endsWith("?raw") && !url.endsWith("/?raw")) {
-                url = url.substring(0, url.lastIndexOf("?raw")) + "/?raw";
-            }
-
             if (WPMv2.domCache[url] != null) {
                 if (Date.now() - WPMv2.domCache[url].timestamp < WPMv2.cacheTimeout) {
                     return WPMv2.domCache[url].dom;
@@ -1002,6 +998,10 @@
                     }
                 }
             } else {
+                if(url.endsWith("?raw") && !url.endsWith("/?raw")) {
+                    url = url.substring(0, url.lastIndexOf("?raw")) + "/?raw";
+                }
+
                 response = await fetch(url, {credentials: 'same-origin'});
             }
 
@@ -1460,8 +1460,8 @@
         registerRepository: WPMv2.registerRepository,
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
-        version: 2.25,
-        revision: "$Id: WPMv2.js 890 2022-04-26 08:10:50Z au182811@uni.au.dk $"
+        version: 2.26,
+        revision: "$Id: WPMv2.js 891 2022-04-26 08:26:42Z au182811@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
