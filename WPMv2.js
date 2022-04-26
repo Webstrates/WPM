@@ -1461,7 +1461,7 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         version: 2.26,
-        revision: "$Id: WPMv2.js 891 2022-04-26 08:26:42Z au182811@uni.au.dk $"
+        revision: "$Id: WPMv2.js 894 2022-04-26 10:49:57Z au182865@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
@@ -1504,6 +1504,15 @@ class WPMBoot {
             if (!(requireStep.dependencies && Array.isArray(requireStep.dependencies))){
                 console.warn("WPM bootloader skipping incorrect requirestep, dependency list is missing", requireStep);
                 continue;
+            }
+            if (requireStep.repositories){
+                if (typeof requireStep.repositories !== "object"){
+                    console.warn("WPM bootloader skipping registration of repositories because requireStep.repositories isn't an object map of name->url", requireStep);
+                } else {
+                    for (const [key, value] of Object.entries(requireStep.repositories)) {
+                        WPMv2.registerRepository(key, value);
+                    }
+                }
             }
 
             if (requireStep.options){
