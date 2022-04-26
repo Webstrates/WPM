@@ -1231,7 +1231,7 @@
             } else {
                 currentAliases = sessionStorage.getItem(WPM_ALIASES);
             }
-            if (typeof currentAliases !== "object"){
+            if ((!currentAliases) || typeof currentAliases !== "object"){
                 currentAliases = {};
             }
 
@@ -1250,12 +1250,13 @@
          * @param useLocalStorage If true, the alias is removed from localStorage, if not, from sessionStorage
          */
         static unregisterRepository(alias, useLocalStorage = false) {
-            let currentAliases = {};
-
             if(useLocalStorage) {
                 currentAliases = localStorage.getItem(WPM_ALIASES);
             } else {
                 currentAliases = sessionStorage.getItem(WPM_ALIASES);
+            }
+            if ((!currentAliases) || typeof currentAliases !== "object"){
+                currentAliases = {};
             }
 
             delete currentAliases[alias];
@@ -1483,7 +1484,7 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         version: 2.26,
-        revision: "$Id: WPMv2.js 895 2022-04-26 11:01:41Z au182865@uni.au.dk $"
+        revision: "$Id: WPMv2.js 896 2022-04-26 11:06:40Z au182865@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
