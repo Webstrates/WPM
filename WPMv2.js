@@ -1198,6 +1198,12 @@
             document.dispatchEvent(eventAny);
         }
 
+        /**
+         * Registers a repository alias
+         * @param alias The alias to register
+         * @param repository The repository to register the alias to
+         * @param useLocalStorage If true, the registered alias is registered in localStorage, if not, in sessionStorage
+         */
         static registerRepository(alias, repository, useLocalStorage = false) {
             let currentAliases = {};
 
@@ -1216,6 +1222,11 @@
             }
         }
 
+        /**
+         * Unregisters a repository alias
+         * @param alias The alias to unregister
+         * @param useLocalStorage If true, the alias is removed from localStorage, if not, from sessionStorage
+         */
         static unregisterRepository(alias, useLocalStorage = false) {
             let currentAliases = {};
 
@@ -1234,6 +1245,10 @@
             }
         }
 
+        /**
+         * Clears all registered aliases from storage
+         * @param useLocalStorage If true, clears from localStorage, if not, from sessionStorage
+         */
         static clearRegisteredRepositories(useLocalStorage = false) {
             if(useLocalStorage) {
                 localStorage.setItem(WPM_ALIASES, {});
@@ -1446,7 +1461,7 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         version: 2.25,
-        revision: "$Id: WPMv2.js 889 2022-04-26 08:08:57Z au182811@uni.au.dk $"
+        revision: "$Id: WPMv2.js 890 2022-04-26 08:10:50Z au182811@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
