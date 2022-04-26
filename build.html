@@ -431,7 +431,7 @@
                         await addPackage(pkg);
                     }
                 } catch (ex){
-                    console.error("WPMv2 very important error: Could not resolve repository. This will probably cause the site to fail horribly! ", repoUrl);
+                    console.error("WPMv2 very important error: Could not resolve repository. This will probably cause the site to fail horribly! ", repoUrl, ex);
                 }
             }
 
@@ -461,6 +461,7 @@
                     if(pkg.startsWith("http") || (pkg.startsWith("/") && pkg.indexOf(" ") === 0)) {
                         //Full repository, http(s)://myrepourl or /my-relative-url
                         await addRepo(pkg);
+                        continue;
                     } else {
                         //Single package, name or including repository
                         let split = pkg.split(" ");
@@ -493,6 +494,7 @@
                     } else if(pkg.repository != null) {
                         //Full repo, add all
                         await addRepo(pkg.repository, pkg);
+                        continue;
                     }
                 }
 
@@ -954,7 +956,33 @@
             return assetResult;
         }
 
+        static lookupRepoAlias(alias) {
+            let result = alias;
+
+            //Insert check for actual url alias lookup here
+            const aliasMappings = JSON.parse(localStorage.getItem("WPM.repoAliases"));
+            if(aliasMappings?.hasOwnProperty(alias)) {
+                result = aliasMappings[alias];
+            } else {
+                //Check if alias might be an url already?
+                if(alias.startsWith("http") || alias.startsWith("/")) {
+                    //Probabely an url
+                    result = alias;
+                } else {
+                    //We had no alias, and the alias did not look like an url, try to make it look like old webstrate url: /alias/?raw
+                    result = "/"+alias+"/?raw";
+                }
+            }
+
+            console.log("Looking up repository alias:", alias, "->", result);
+
+            return result;
+        }
+
         static async fetchDom(url) {
+            //Lookup repos aliases
+            url = WPMv2.lookupRepoAlias(url);
+
             if(url.endsWith("?raw") && !url.endsWith("/?raw")) {
                 url = url.substring(0, url.lastIndexOf("?raw")) + "/?raw";
             }
@@ -1153,6 +1181,11 @@
 
             let eventAny = new CustomEvent("wpm.packageRemovedAny", {detail: packageName});
             document.dispatchEvent(eventAny);
+        }
+
+        static setRepoAliases(aliases) {
+            console.log("Setting repo aliases to:", aliases);
+            localStorage.setItem("WPM.repoAliases", JSON.stringify(aliases));
         }
     }
 
@@ -1355,8 +1388,9 @@
         getPackagesFromRepository: WPMv2.getPackagesFromRepository,
         getCurrentlyInstalledPackages: WPMv2.getCurrentlyInstalledPackages,
         getLatestPackageFromPackage: WPMv2.getLatestPackageFromPackage,
-        version: 2.24,
-        revision: "$Id: WPMv2.js 883 2022-04-22 13:34:24Z au182865@uni.au.dk $"
+        setRepoAliases: WPMv2.setRepoAliases,
+        version: 2.25,
+        revision: "$Id: WPMv2.js 886 2022-04-26 04:58:14Z au182811@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
