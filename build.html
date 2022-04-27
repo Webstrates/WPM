@@ -1227,6 +1227,23 @@
             document.dispatchEvent(eventAny);
         }
 
+        static getRegisteredRepositories(useLocalStorage) {
+            let currentAliases = null;
+
+            try {
+                if(useLocalStorage) {
+                    currentAliases = JSON.parse(localStorage.getItem(WPM_ALIASES));
+                } else {
+                    currentAliases = JSON.parse(sessionStorage.getItem(WPM_ALIASES));
+                }
+            } catch (ex){}
+            if (currentAliases == null || typeof currentAliases !== "object"){
+                currentAliases = {};
+            }
+
+            return currentAliases;
+        }
+
         /**
          * Registers a repository alias
          * @param alias The alias to register
@@ -1243,7 +1260,7 @@
                     currentAliases = JSON.parse(sessionStorage.getItem(WPM_ALIASES));
                 }
             } catch (ex){}
-            if ((!currentAliases) || typeof currentAliases !== "object"){
+            if (currentAliases == null || typeof currentAliases !== "object"){
                 currentAliases = {};
             }
 
@@ -1271,7 +1288,7 @@
                     currentAliases = JSON.parse(sessionStorage.getItem(WPM_ALIASES));
                 }
             } catch (ex){}
-            if ((!currentAliases) || typeof currentAliases !== "object"){
+            if (currentAliases != null || typeof currentAliases !== "object"){
                 currentAliases = {};
             }
 
@@ -1499,8 +1516,9 @@
         registerRepository: WPMv2.registerRepository,
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
-        version: 2.26,
-        revision: "$Id: WPMv2.js 900 2022-04-26 11:28:10Z au182865@uni.au.dk $"
+        getRegisteredRepositories: WPMv2.getRegisteredRepositories,
+        version: 2.27,
+        revision: "$Id: WPMv2.js 904 2022-04-27 08:51:35Z au182811@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
