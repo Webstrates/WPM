@@ -1,3 +1,7 @@
+html:not([transient-wpm2-bootloader="loaded"]) > * {
+        opacity: 0;
+}
+
 html[transient-wpm2-bootloader="waiting"], html[transient-wpm2-bootloader="loading"], html[transient-wpm2-bootloader="loaded"] {
     @keyframes wpm-bootloader-spin {
         from {transform: translate(-50%,-50%) rotate(0);}
@@ -26,12 +30,7 @@ html[transient-wpm2-bootloader="waiting"], html[transient-wpm2-bootloader="loadi
         pointer-events: none;
     }    
     
-    
-    &:not([transient-wpm2-bootloader="loaded"]) > * {
-        opacity: 0;
-    }    
     &[transient-wpm2-bootloader="loaded"]:before {
         animation: wpm-bootloader-done 1s ease-out both;
     }
 }
-

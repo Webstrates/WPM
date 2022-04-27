@@ -1629,6 +1629,9 @@ if(typeof webstrate  !== "undefined") {
 </script>
 
             <style id="loading-style">
+html:not([transient-wpm2-bootloader="loaded"]) > * {
+  opacity: 0; }
+
 @keyframes wpm-bootloader-spin {
   from {
     transform: translate(-50%, -50%) rotate(0); }
@@ -1664,9 +1667,6 @@ html[transient-wpm2-bootloader="waiting"]:before, html[transient-wpm2-bootloader
   border-bottom-color: rgba(11, 90, 21, 0.466);
   box-shadow: 0 0 2em rgba(49, 60, 162, 0.446);
   pointer-events: none; }
-
-html[transient-wpm2-bootloader="waiting"]:not([transient-wpm2-bootloader="loaded"]) > *, html[transient-wpm2-bootloader="loading"]:not([transient-wpm2-bootloader="loaded"]) > *, html[transient-wpm2-bootloader="loaded"]:not([transient-wpm2-bootloader="loaded"]) > * {
-  opacity: 0; }
 
 html[transient-wpm2-bootloader="waiting"][transient-wpm2-bootloader="loaded"]:before, html[transient-wpm2-bootloader="loading"][transient-wpm2-bootloader="loaded"]:before, html[transient-wpm2-bootloader="loaded"][transient-wpm2-bootloader="loaded"]:before {
   animation: wpm-bootloader-done 1s ease-out both; }
