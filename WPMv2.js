@@ -940,8 +940,6 @@
         }
 
         static lookupRepoAlias(alias) {
-            console.groupCollapsed("Alias lookup:", alias);
-
             let localStorageAliases = {};
             let sessionStorageAliases = {};
             try {
@@ -957,26 +955,17 @@
 
             if(localStorageAliases?.hasOwnProperty(alias)) {
                 let result = localStorageAliases[alias];
-                console.log("Found localStorageAlias:", result);
-                console.groupEnd();
                 return result;
             } else if(sessionStorageAliases?.hasOwnProperty(alias)) {
                 let result = sessionStorageAliases[alias];
-                console.log("Found sessionStorageAlias:", result);
-                console.groupEnd();
                 return result;
             } else {
                 //Check if alias might be an url already?
                 if(alias.startsWith("http") || alias.startsWith("/")) {
                     //Probabely an url
-                    console.log("Alias looks like a complete url");
-                    console.groupEnd()
                     return alias;
                 }
             }
-
-            console.log("No registered alias found, and does not look like an url. Trying webstrate and file approach...");
-            console.groupEnd();
 
             return ["/"+alias+"/?raw", "/"+alias+"/index.html"];
         }
@@ -1112,6 +1101,14 @@
          * @returns {Promise<void>} - Resolves when WPMv2 is updated
          */
         static async updateWPM(url) {
+            console.group("Updating WPM...");
+            if(url == null) {
+                console.log("No repository given for update, defaulting to \"/wpm/?raw\"");
+                url = "/wpm/?raw";
+            }
+
+            console.log("Version before update:", window.WPMv2.version);
+
             let dom = await WPMv2.fetchDom(url);
 
             let newWpm = dom.querySelector("#WPMv2-script");
@@ -1120,9 +1117,13 @@
 
             ourWpm.textContent = newWpm.textContent;
 
+            if(ourWpm.hasAttribute("src")) {
+                ourWpm.removeAttribute("src");
+                console.warn("Removed src attribute on WPMScript, now inlined instead!");
+            }
             eval.call(null, ourWpm.textContent);
-
-            console.log("WPMv2 updated!");
+            console.log("Version after update:", window.WPMv2.version);
+            console.groupEnd();
         }
 
         /**
@@ -1499,7 +1500,7 @@
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
         version: 2.27,
-        revision: "$Id: WPMv2.js 904 2022-04-27 08:51:35Z au182811@uni.au.dk $"
+        revision: "$Id: WPMv2.js 905 2022-04-28 06:34:15Z au182811@uni.au.dk $"
     };
     
     window.WPM = window.WPMv2;
