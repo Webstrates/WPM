@@ -974,23 +974,14 @@
             //Lookup repos aliases
             url = WPMv2.lookupRepoAlias(url);
 
-            if (WPMv2.domCache[url] != null) {
-                if (Date.now() - WPMv2.domCache[url].timestamp < WPMv2.cacheTimeout) {
-                    return WPMv2.domCache[url].dom;
-                }
-            }
-
-            let response = null;
-
             if(Array.isArray(url)) {
+                //Call again for each url in array
                 for(let u of url) {
                     try {
-                        response = await fetch(u, {credentials: 'same-origin'});
-                        if(response != null && response.status === 200) {
-                            //We got a correct response, break
-                            break;
+                        let fetchedDom = await this.fetchDom(u);
+                        if(fetchedDom != null) {
+                            return fetchedDom;
                         }
-                        response = null;
                     } catch(e) {
                         //Ignore?
                         console.warn(e);
@@ -1000,33 +991,41 @@
                 if(url.endsWith("?raw") && !url.endsWith("/?raw")) {
                     url = url.substring(0, url.lastIndexOf("?raw")) + "/?raw";
                 }
+                let cachedDom = WPMv2.domCache.get(url);
 
-                response = await fetch(url, {credentials: 'same-origin'});
-            }
-
-            if(response != null) {
-
-                let documentText = await response.text();
-
-                let parsedDom = WPMv2.parser.parseFromString(documentText, "text/html");
-
-                if (parsedDom.readyState === "loading") {
-                    await new Promise((resolve, reject) => {
-                        parsedDom.addEventListener("DOMContentLoaded", () => {
-                            resolve();
-                        });
-                    });
+                if (cachedDom != null) {
+                    if (Date.now() - cachedDom.timestamp < WPMv2.cacheTimeout) {
+                        return cachedDom.dom;
+                    }
                 }
 
-                WPMv2.domCache[url] = {
-                    dom: parsedDom,
-                    timestamp: Date.now()
-                };
+                let response = await fetch(url, {credentials: 'same-origin'});
 
-                return parsedDom;
-            } else {
-                console.error("Unable to fetchDOM from: ", url);
+                if(response != null) {
+
+                    let documentText = await response.text();
+
+                    let parsedDom = WPMv2.parser.parseFromString(documentText, "text/html");
+
+                    if (parsedDom.readyState === "loading") {
+                        await new Promise((resolve, reject) => {
+                            parsedDom.addEventListener("DOMContentLoaded", () => {
+                                resolve();
+                            });
+                        });
+                    }
+
+                    WPMv2.domCache.set(url, {
+                        dom: parsedDom,
+                        timestamp: Date.now()
+                    });
+
+                    return parsedDom;
+                }
             }
+
+            console.error("Unable to fetchDOM from: ", url);
+            return null;
         }
 
         /**
@@ -1296,7 +1295,7 @@
         }
     }
 
-    WPMv2.domCache = {};
+    WPMv2.domCache = new Map();
     WPMv2.assetsCache = {};
     WPMv2.parser = new DOMParser();
     WPMv2.cacheTimeout = 5000;
@@ -1499,8 +1498,9 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
-        version: 2.28,
-        revision: "$Id: WPMv2.js 944 2022-08-24 11:37:57Z au182865@uni.au.dk $"
+        version: 2.29,
+        revision: "$Id: WPMv2.js 947 2022-09-07 06:41:38Z au182811@uni.au.dk $",
+        test: WPMv2
     };
     
     window.WPM = window.WPMv2;
