@@ -717,7 +717,7 @@
 
                     // POST all assets to the target
                     if (wpmPackage.assets.length > 0) {
-                        let repoAssetsUrl = wpmPackage.repository.substring(0, wpmPackage.repository.indexOf("?")) + "?assets&latest";
+                        let repoAssetsUrl = WPMv2.lookupRepoAlias(wpmPackage.repository);
                         let repoAssets = await WPMv2.fetchAssets(repoAssetsUrl);
 
                         let localAssetsUrl = location.pathname + "?assets&latest";
@@ -735,16 +735,9 @@
                             }
 
                             assetPromises.push(new Promise(async function (resolve, reject) {
-                                // Construct URL
-                                let assetUrl = wpmPackage.repository.substring(0, wpmPackage.repository.indexOf("?"));
-                                if (!assetUrl.endsWith("/")) {
-                                    assetUrl += "/";
-                                }
-                                assetUrl += asset;
+                                let blob = await WPMv2.fetchAsset(repoAssetsUrl, asset);
 
                                 // Fetch it and append to POST
-                                let response = await fetch(assetUrl, {credentials: 'same-origin'});
-                                let blob = await response.blob();
                                 formData.append("file", blob, asset);
                                 resolve();
                             }));
@@ -929,7 +922,51 @@
             return null;
         }
 
+        static async fetchAsset(url, asset) {
+            if(Array.isArray(url)) {
+                for(let u of url) {
+                    try {
+                        let fetchedAsset = await WPMv2.fetchAsset(u, asset);
+                        if(fetchedAsset != null) {
+                            return fetchedAsset;
+                        }
+                    } catch(e) {
+                        //Ignore
+                    }
+                }
+            }
+
+            let assetUrl = url.substring(0, url.indexOf("?"));
+            if (!assetUrl.endsWith("/")) {
+                assetUrl += "/";
+            }
+
+            assetUrl += asset;
+
+            let response = await fetch(assetUrl, {credentials: 'same-origin'});
+            let blob = await response.blob();
+
+            return blob;
+        }
+
         static async fetchAssets(url) {
+            if(Array.isArray(url)) {
+                for(let u of url) {
+                    try {
+                        let assets = await WPMv2.fetchAssets(u);
+                        if (assets != null) {
+                            return assets;
+                        }
+                    } catch(e) {
+                        //Ignore ?
+                    }
+                }
+            }
+
+            if(!url.endsWith("?assets&latest")) {
+                url = url.substring(0, url.indexOf("?")) + "?assets&latest";
+            }
+
             if (WPMv2.assetsCache[url] != null) {
                 if (Date.now() - WPMv2.assetsCache[url].timestamp < WPMv2.cacheTimeout) {
                     return WPMv2.assetsCache[url].assets;
@@ -1517,8 +1554,8 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
-        version: 2.29,
-        revision: "$Id: WPMv2.js 947 2022-09-07 06:41:38Z au182811@uni.au.dk $",
+        version: 2.30,
+        revision: "$Id: WPMv2.js 950 2022-09-13 12:16:34Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
