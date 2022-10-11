@@ -440,7 +440,7 @@
 
             async function addPackage(wpmPackage) {
                 //Check if package is in local dom
-                let localPackageDom = document.querySelector(".packages .package#" + pkg.name + ", wpm-package#" + pkg.name);
+                let localPackageDom = document.querySelector(".packages .package#" + wpmPackage.name + ", wpm-package#" + wpmPackage.name);
                 if(localPackageDom != null) {
                     //Local package exists, override repository with local ?
                     wpmPackage.repository = WPMv2.getLocalRepositoryURL();
@@ -836,7 +836,13 @@
          * @ignore
          */
         static async getPackageDOM(repository, packageName) {
-            let dom = await WPMv2.fetchDom(repository);
+            let dom = null;
+
+            if(repository == this.getLocalRepositoryURL()) {
+                dom = document.querySelector("html");
+            } else {
+                dom = await WPMv2.fetchDom(repository);
+            }
 
             let packageDOMSource = dom.querySelector(".packages .package#" + packageName + ", wpm-package#" + packageName);
             if (packageDOMSource === null) {
@@ -1562,8 +1568,8 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
-        version: 2.31,
-        revision: "$Id: WPMv2.js 954 2022-10-11 06:19:55Z au182811@uni.au.dk $",
+        version: 2.32,
+        revision: "$Id: WPMv2.js 955 2022-10-11 11:13:56Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
