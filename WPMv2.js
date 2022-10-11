@@ -27,6 +27,8 @@
 
     let allInstalledCallbacksStack = [];
 
+    const requireQueue = [];
+
     /**
      * WebstratePackageManager version 2
      *
@@ -45,7 +47,6 @@
         static async bootstrap(packageDom, options, requireToken, triggerOnPackageInstalled = false) {
             let wpmPackage = WPMv2.getWPMPackageFromDOM(packageDom);
             let promises = [];
-            let alreadyLoadedExternals = new Set();
 
             /**
              * @class WPMInterface
@@ -419,6 +420,13 @@
             }
 
             async function addPackage(wpmPackage) {
+                //Check if package is in local dom
+                let localPackageDom = document.querySelector(".packages .package#" + pkg.name + ", wpm-package#" + pkg.name);
+                if(localPackageDom != null) {
+                    //Local package exists, override repository with local ?
+                    wpmPackage.repository = WPMv2.getLocalRepositoryURL();
+                }
+
                 if(!WPMv2.hasPackage(convertedPackages, wpmPackage)) {
                     try {
                         wpmPackage = await WPMv2.getLatestPackageFromPackage(wpmPackage);
@@ -874,7 +882,7 @@
          * });
          *
          * @param {String} repositoryUrl the repository to search
-         * @returns {WPMv2.WPMPackage[]} the packages found
+         * @returns {Promise<WPMv2.WPMPackage[]>} the packages found
          */
         static async getPackagesFromRepository(repositoryUrl) {
             let packages = [];
@@ -1535,8 +1543,8 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
-        version: 2.30,
-        revision: "$Id: WPMv2.js 950 2022-09-13 12:16:34Z au182811@uni.au.dk $",
+        version: 2.31,
+        revision: "$Id: WPMv2.js 954 2022-10-11 06:19:55Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
