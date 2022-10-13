@@ -1708,7 +1708,7 @@ if(typeof webstrate  !== "undefined") {
 
             <style id="loading-style">
 html:not([transient-wpm2-bootloader="loaded"]) > * {
-  opacity: 0; }
+  opacity: 0 !important; }
 
 @keyframes wpm-bootloader-spin {
   from {
@@ -1730,7 +1730,7 @@ html:not([transient-wpm2-bootloader="loaded"]) > * {
     opacity: 0;
     filter: blur(2em); } }
 
-html[transient-wpm2-bootloader="waiting"]:before, html[transient-wpm2-bootloader="loading"]:before, html[transient-wpm2-bootloader="loaded"]:before {
+html[transient-wpm2-bootloader="waiting"]:before, html[transient-wpm2-bootloader="loading"]:before, html[transient-wpm2-bootloader="initializing"]:before, html[transient-wpm2-bootloader="loaded"]:before {
   animation: wpm-bootloader-spin 1s infinite linear both;
   content: "";
   position: fixed;
@@ -1744,9 +1744,10 @@ html[transient-wpm2-bootloader="waiting"]:before, html[transient-wpm2-bootloader
   border-top-color: rgba(0, 102, 255, 0.589);
   border-bottom-color: rgba(11, 90, 21, 0.466);
   box-shadow: 0 0 2em rgba(49, 60, 162, 0.446);
-  pointer-events: none; }
+  pointer-events: none;
+  z-index: 9999; }
 
-html[transient-wpm2-bootloader="waiting"][transient-wpm2-bootloader="loaded"]:before, html[transient-wpm2-bootloader="loading"][transient-wpm2-bootloader="loaded"]:before, html[transient-wpm2-bootloader="loaded"][transient-wpm2-bootloader="loaded"]:before {
+html[transient-wpm2-bootloader="waiting"][transient-wpm2-bootloader="loaded"]:before, html[transient-wpm2-bootloader="loading"][transient-wpm2-bootloader="loaded"]:before, html[transient-wpm2-bootloader="initializing"][transient-wpm2-bootloader="loaded"]:before, html[transient-wpm2-bootloader="loaded"][transient-wpm2-bootloader="loaded"]:before {
   animation: wpm-bootloader-done 1s ease-out both; }
 </style>
 

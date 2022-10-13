@@ -1,8 +1,8 @@
 html:not([transient-wpm2-bootloader="loaded"]) > * {
-        opacity: 0;
+        opacity: 0 !important;
 }
 
-html[transient-wpm2-bootloader="waiting"], html[transient-wpm2-bootloader="loading"], html[transient-wpm2-bootloader="loaded"] {
+html[transient-wpm2-bootloader="waiting"], html[transient-wpm2-bootloader="loading"], html[transient-wpm2-bootloader="initializing"], html[transient-wpm2-bootloader="loaded"] {
     @keyframes wpm-bootloader-spin {
         from {transform: translate(-50%,-50%) rotate(0);}
         to {transform: translate(-50%,-50%) rotate(360deg);}
@@ -28,6 +28,7 @@ html[transient-wpm2-bootloader="waiting"], html[transient-wpm2-bootloader="loadi
         border-bottom-color: rgba(11, 90, 21, 0.466);
         box-shadow: 0 0 2em rgba(49, 60, 162, 0.446);
         pointer-events: none;
+        z-index: 9999;
     }    
     
     &[transient-wpm2-bootloader="loaded"]:before {
