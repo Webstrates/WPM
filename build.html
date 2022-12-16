@@ -276,34 +276,35 @@
                 for(let url of urls) {
 
                     let promise = new Promise(async (resolve, reject)=>{
+                        try {
+                            let response = await fetch(url, {credentials: 'same-origin'});
 
-                        let response = await fetch(url, {credentials: 'same-origin'});
-
-                        let contentType = response.headers.get("Content-Type").trim();
-                        let indexOfSemicolon = contentType.indexOf(";");
-                        if(indexOfSemicolon !== -1) {
-                            contentType = contentType.substring(0, indexOfSemicolon).trim();
-                        }
-
-                        switch(contentType) {
-                            case "text/css":
-                            {
-                                await loadExternalCSS(response);
-                                break;
+                            let contentType = response.headers.get("Content-Type").trim();
+                            let indexOfSemicolon = contentType.indexOf(";");
+                            if (indexOfSemicolon !== -1) {
+                                contentType = contentType.substring(0, indexOfSemicolon).trim();
                             }
-                            case "text/javascript":
-                            case "application/javascript":
-                            case "application/x-javascript":
-                            {
-                                await loadExternalJS(response);
-                                break;
+
+                            switch (contentType) {
+                                case "text/css": {
+                                    await loadExternalCSS(response);
+                                    break;
+                                }
+                                case "text/javascript":
+                                case "application/javascript":
+                                case "application/x-javascript": {
+                                    await loadExternalJS(response);
+                                    break;
+                                }
+                                default:
+                                    console.warn("Unhandled contentType:", contentType, url);
+                                    console.warn("Loading unknown as JS for know. please report...")
+                                    await loadExternalJS(response);
                             }
-                            default:
-                                console.warn("Unhandled contentType:", contentType, url);
-                                console.warn("Loading unknown as JS for know. please report...")
-                                await loadExternalJS(response);
+                            resolve();
+                        } catch(e) {
+                            reject("Unable to fetch: "+url);
                         }
-                        resolve();
                     });
 
                     promises.push(promise);
@@ -1568,8 +1569,8 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
-        version: 2.32,
-        revision: "$Id: WPMv2.js 955 2022-10-11 11:13:56Z au182811@uni.au.dk $",
+        version: 2.33,
+        revision: "$Id: WPMv2.js 988 2022-12-16 10:27:12Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
