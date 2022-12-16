@@ -288,7 +288,7 @@
                         }
                     });
 
-                    promises.push(promise);
+                    //promises.push(promise);
 
                     await promise;
                 }
@@ -1551,7 +1551,7 @@
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
         version: 2.33,
-        revision: "$Id: WPMv2.js 988 2022-12-16 10:27:12Z au182811@uni.au.dk $",
+        revision: "$Id: WPMv2.js 989 2022-12-16 10:37:55Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
