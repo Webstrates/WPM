@@ -25,6 +25,8 @@
 
     const WPM_ALIASES = "WPM.repoAliases";
 
+    let runningRequiresPromiseMap = [];
+
     let allInstalledCallbacksStack = [];
 
     const requireQueue = [];
@@ -307,6 +309,8 @@
                 } else {
                     scriptContent = script.innerText;
                 }
+                
+                scriptContent = 'try{'+scriptContent+'} catch (ex){console.error("Bootstrap runtime error in '+packageDom.getAttribute("id").replaceAll("'","")+':", ex);}';
 
                 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
@@ -328,10 +332,7 @@
                     let wpmEval = new AsyncFunction(...functionArgs, scriptContent);
                     await wpmEval(...functionArgValues);
                 } catch (e) {
-                    console.groupCollapsed("Bootstrap error in " + packageDom.getAttribute("id"));
-                    console.log(scriptContent);
-                    console.groupEnd();
-                    console.error(e);
+                    console.error("Bootstrap parse error in " + packageDom.getAttribute("id"), e);
                 }
             }
 
@@ -400,6 +401,7 @@
                 packages = [packages];
             }
 
+            let alreadySorting = [];
             let convertedPackages = [];
 
             async function addRepo(repoUrl, options) {
@@ -428,7 +430,9 @@
                     wpmPackage.repository = WPMv2.getLocalRepositoryURL();
                 }
 
-                if(!WPMv2.hasPackage(convertedPackages, wpmPackage)) {
+                let name = WPMv2.getName(wpmPackage);
+                if(!alreadySorting.includes(name)){
+                    alreadySorting.push(name);
                     try {
                         wpmPackage = await WPMv2.getLatestPackageFromPackage(wpmPackage);
                         let dependencies = await WPMv2.findAllDependencies(wpmPackage);
@@ -442,8 +446,9 @@
                     }
                 }
             }
-
-            for(let pkg of packages) {
+            
+            // Resolve all the packages
+            await Promise.all(packages.map(async (pkg)=>{
                 let wpmPackage = null;
                 if (pkg instanceof WPMPackage) {
                     //Already a WPMPackage
@@ -453,7 +458,7 @@
                     if(pkg.startsWith("http") || (pkg.startsWith("/") && pkg.indexOf(" ") === 0)) {
                         //Full repository, http(s)://myrepourl or /my-relative-url
                         await addRepo(pkg);
-                        continue;
+                        return;
                     } else {
                         //Single package, name or including repository
                         let split = pkg.split(" ");
@@ -486,7 +491,7 @@
                     } else if(pkg.repository != null) {
                         //Full repo, add all
                         await addRepo(pkg.repository, pkg);
-                        continue;
+                        return;
                     }
                 }
 
@@ -495,7 +500,7 @@
                 } else {
                     console.log("Was null:", pkg);
                 }
-            }
+            }));
 
             const sortedPackages = [];
             let lastLength = convertedPackages.length;
@@ -559,23 +564,8 @@
          */
         static hasPackage(packages, searchPackage) {
             return packages.find((pkg)=>{
-                let pkgName = null;
-                let searchPackageName = null;
-                if(pkg instanceof WPMPackage) {
-                    pkgName = pkg.name;
-                } else if(pkg.package != null) {
-                    pkgName = pkg.package;
-                } else {
-                    console.warn("Unable to infer package name from:", pkg);
-                }
-
-                if(searchPackage instanceof WPMPackage) {
-                    searchPackageName = searchPackage.name;
-                } else if(searchPackage.package != null) {
-                    searchPackageName = searchPackage.package;
-                } else {
-                    console.warn("Unable to infer package name from:", searchPackage);
-                }
+                let pkgName = WPMv2.getName(pkg);
+                let searchPackageName = WPMv2.getName(searchPackage);
 
                 if(pkgName == null || searchPackageName == null) {
                     console.warn("Unable to compare as one was null");
@@ -584,6 +574,17 @@
 
                 return pkgName === searchPackageName;
             }) != null;
+        }
+        
+        static getName(searchPackage){
+            if(searchPackage instanceof WPMPackage) {
+                return searchPackage.name;
+            } else if(searchPackage.package != null) {
+                return searchPackage.package;
+            } else {
+                console.warn("Unable to infer package name from:", searchPackage);
+                return null;
+            }            
         }
 
         /**
@@ -612,7 +613,7 @@
             }
 
             const completePackageTreeSorted = await WPMv2.findCompletePackageTreeSorted(packages, defaultOptions, overrideOptions);
-
+            
             if (packages.length === 0) {
                 return;
             }
@@ -628,134 +629,168 @@
                 console.time(requireTimerId);
             }
 
+            // Schedule all the package promises in parallel, but keep track of package inter-dependencies too
+            let packagePromiseMap = new Map();
+
+            //Save the currently running require
+            runningRequiresPromiseMap.push(packagePromiseMap);
+
             for (let pkg of completePackageTreeSorted) {
+                // At this point, since the tree is sorted, a dependency is either hard and supposed to be in the tree or soft and maybe in the tree (if not, then not installed)
+                // If the depedency is hard and not in the tree then a missing package error has already happened and we are going by best-effort anyways, so ignore this case.
 
-                let options = Object.assign({}, defaultOptions, pkg.getPackageOptions(), overrideOptions);
-
-                //Check if package is in dom
-                let packageDom = document.querySelector(".packages .package#" + pkg.name + ", wpm-package#" + pkg.name);
-
-                let alreadyInstalled = false;
-
-                let wpmPackage = null;
-
-                let needsAppending = false;
-
-                if (packageDom == null) {
-                    //We need to fetch and install package to dom
-                    let fetchedPackageDom = await WPMv2.getPackageDOM(pkg.repository, pkg.name);
-
-                    //Rewrite packageDom to a wpm-package
-                    packageDom = document.createElement("wpm-package");
-
-                    for (let index = fetchedPackageDom.attributes.length - 1; index > -1; --index) {
-                        let attribute = fetchedPackageDom.attributes[index];
-                        packageDom.setAttribute(attribute.name, attribute.value);
+                //Check for another require already promising to install this package
+                let foundPromise = null;
+                for(let promiseMap of runningRequiresPromiseMap) {
+                    if(promiseMap.has(pkg.name)) {
+                        //Use other require promise, to tell us when package is installed
+                        foundPromise = promiseMap.get(pkg.name);
+                        break;
                     }
-
-                    // Instead of display:none, hide it otherwise due to Chrome bug for SVGs
-                    packageDom.style.width = 0;
-                    packageDom.style.height = 0;
-                    packageDom.style.position = "absolute";
-                    packageDom.style.visibility = "hidden";
-
-                    Array.from(fetchedPackageDom.children).forEach((child) => {
-                        packageDom.appendChild(child);
-                    });
-
-                    WPMv2.stripProtection(packageDom);
-
-                    wpmPackage = WPMv2.getWPMPackageFromDOM(packageDom);
-
-                    needsAppending = true;
-                } else {
-                    wpmPackage = WPMv2.getWPMPackageFromDOM(packageDom);
-                    alreadyInstalled = true;
                 }
 
-                //Install into page
-                if(needsAppending) {
-                    let appendTarget = options.appendTarget;
+                if(foundPromise != null) {
+                    packagePromiseMap.set(pkg.name, foundPromise);
+                } else {
 
-                    if(typeof appendTarget === "string") {
-                        appendTarget = document.querySelector(appendTarget);
-                    }
+                    packagePromiseMap.set(pkg.name, async function multithreadedFetchPackage() {
+                        // Lookup all hard and optional dependencies and wait for them before starting ours
+                        await Promise.all([...pkg.dependencyMap.keys(), ...pkg.optionalDependencyMap.keys()].map((dependency) => {
+                            return packagePromiseMap.get(dependency);
+                        }));
 
-                    if (appendTarget == null) {
-                        appendTarget = document.createElement("div");
-                        appendTarget.setAttribute("transient-element", "");
-                        appendTarget.setAttribute("transient-wpmid", packageDom.id);
-                        document.head.appendChild(appendTarget);
-                    }
+                        // Install this package
+                        let options = Object.assign({}, defaultOptions, pkg.getPackageOptions(), overrideOptions);
 
-                    switch (options.appendMethod.toLowerCase()) {
-                        case "before":
-                            appendTarget.parentNode.insertBefore(packageDom, appendTarget);
-                            break;
+                        //Check if package is in dom
+                        let packageDom = document.querySelector(".packages .package#" + pkg.name + ", wpm-package#" + pkg.name);
 
-                        case "after":
-                            appendTarget.parentNode.insertBefore(packageDom, appendTarget.nextSibling);
-                            break;
-                        case "prepend":
-                            appendTarget.prepend(packageDom);
-                            break;
+                        let alreadyInstalled = false;
 
-                        case "append":
-                        default:
-                            appendTarget.append(packageDom);
-                    }
+                        let wpmPackage = null;
 
-                    // POST all assets to the target
-                    if (wpmPackage.assets.length > 0) {
-                        let repoAssetsUrl = WPMv2.lookupRepoAlias(wpmPackage.repository);
-                        let repoAssets = await WPMv2.fetchAssets(repoAssetsUrl);
+                        let needsAppending = false;
 
-                        let localAssetsUrl = location.pathname + "?assets&latest";
-                        let localAssets = await WPMv2.fetchAssets(localAssetsUrl);
+                        if (packageDom == null) {
+                            //We need to fetch and install package to dom
+                            let fetchedPackageDom = await WPMv2.getPackageDOM(pkg.repository, pkg.name);
 
-                        let formData = new FormData();
-                        let assetPromises = [];
-                        wpmPackage.assets.forEach(function (asset) {
-                            //If we already have same filehash of this asset, skip
-                            let localAsset = localAssets.get(asset);
-                            let repoAsset = repoAssets.get(asset);
+                            //Rewrite packageDom to a wpm-package
+                            packageDom = document.createElement("wpm-package");
 
-                            if(localAsset != null && repoAsset != null && localAsset.fileHash === repoAsset.fileHash) {
-                                return;
+                            for (let index = fetchedPackageDom.attributes.length - 1; index > -1; --index) {
+                                let attribute = fetchedPackageDom.attributes[index];
+                                packageDom.setAttribute(attribute.name, attribute.value);
                             }
 
-                            assetPromises.push(new Promise(async function (resolve, reject) {
-                                let blob = await WPMv2.fetchAsset(repoAssetsUrl, asset);
+                            // Instead of display:none, hide it otherwise due to Chrome bug for SVGs
+                            packageDom.style.width = 0;
+                            packageDom.style.height = 0;
+                            packageDom.style.position = "absolute";
+                            packageDom.style.visibility = "hidden";
 
-                                // Fetch it and append to POST
-                                formData.append("file", blob, asset);
-                                resolve();
-                            }));
-                        });
-
-                        if(assetPromises.length > 0) {
-                            await Promise.all(assetPromises);
-
-                            await fetch(location.pathname, {
-                                body: formData,
-                                credentials: 'same-origin',
-                                method: "post"
+                            Array.from(fetchedPackageDom.children).forEach((child) => {
+                                packageDom.appendChild(child);
                             });
+
+                            WPMv2.stripProtection(packageDom);
+
+                            wpmPackage = WPMv2.getWPMPackageFromDOM(packageDom);
+
+                            needsAppending = true;
+                        } else {
+                            wpmPackage = WPMv2.getWPMPackageFromDOM(packageDom);
+                            alreadyInstalled = true;
                         }
-                    }
-                }
 
-                //Check if package is live
-                if (packageDom.getAttribute("transient-wpm-live") == null) {
-                    //Make package live
-                    await WPMv2.bootstrap(packageDom, overrideOptions, requireToken, !alreadyInstalled);
+                        //Install into page
+                        if (needsAppending) {
+                            let appendTarget = options.appendTarget;
 
-                    packageDom.setAttribute("transient-wpm-live", "");
-                } else {
-                    //Already live
+                            if (typeof appendTarget === "string") {
+                                appendTarget = document.querySelector(appendTarget);
+                            }
+
+                            if (appendTarget == null) {
+                                appendTarget = document.createElement("div");
+                                appendTarget.setAttribute("transient-element", "");
+                                appendTarget.setAttribute("transient-wpmid", packageDom.id);
+                                document.head.appendChild(appendTarget);
+                            }
+
+                            switch (options.appendMethod.toLowerCase()) {
+                                case "before":
+                                    appendTarget.parentNode.insertBefore(packageDom, appendTarget);
+                                    break;
+
+                                case "after":
+                                    appendTarget.parentNode.insertBefore(packageDom, appendTarget.nextSibling);
+                                    break;
+                                case "prepend":
+                                    appendTarget.prepend(packageDom);
+                                    break;
+
+                                case "append":
+                                default:
+                                    appendTarget.append(packageDom);
+                            }
+
+                            // POST all assets to the target
+                            if (wpmPackage.assets.length > 0) {
+                                let repoAssetsUrl = WPMv2.lookupRepoAlias(wpmPackage.repository);
+                                let repoAssets = await WPMv2.fetchAssets(repoAssetsUrl);
+
+                                let localAssetsUrl = location.pathname + "?assets&latest";
+                                let localAssets = await WPMv2.fetchAssets(localAssetsUrl);
+
+                                let formData = new FormData();
+                                let assetPromises = [];
+                                wpmPackage.assets.forEach(function (asset) {
+                                    //If we already have same filehash of this asset, skip
+                                    let localAsset = localAssets.get(asset);
+                                    let repoAsset = repoAssets.get(asset);
+
+                                    if (localAsset != null && repoAsset != null && localAsset.fileHash === repoAsset.fileHash) {
+                                        return;
+                                    }
+
+                                    assetPromises.push(new Promise(async function (resolve, reject) {
+                                        let blob = await WPMv2.fetchAsset(repoAssetsUrl, asset);
+
+                                        // Fetch it and append to POST
+                                        formData.append("file", blob, asset);
+                                        resolve();
+                                    }));
+                                });
+
+                                if (assetPromises.length > 0) {
+                                    await Promise.all(assetPromises);
+
+                                    await fetch(location.pathname, {
+                                        body: formData,
+                                        credentials: 'same-origin',
+                                        method: "post"
+                                    });
+                                }
+                            }
+                        }
+
+                        //Check if package is live
+                        if (packageDom.getAttribute("transient-wpm-live") == null) {
+                            //Make package live
+                            await WPMv2.bootstrap(packageDom, overrideOptions, requireToken, !alreadyInstalled);
+
+                            packageDom.setAttribute("transient-wpm-live", "");
+                        } else {
+                            //Already live
+                        }
+                    }());
                 }
             }
 
+            // Wait for all packages to finish installation
+            await Promise.all(Array.from(packagePromiseMap.values()));
+            
             //Only the first outer call to require, has givenAllInstalledCallbacks set to null
             if (givenRequireToken === null) {
                 let allInstalledCallbacks = allInstalledCallbacksStack.pop();
@@ -768,6 +803,9 @@
                     await allInstalledCallback();
                 }
                 console.timeEnd(allInstalledTimerId);
+
+                //Splice the finished require away
+                runningRequiresPromiseMap.splice(runningRequiresPromiseMap.indexOf(packagePromiseMap), 1);
             }
         }
 
@@ -913,7 +951,6 @@
                 if (metadataDom != null) {
                     return JSON.parse(metadataDom.textContent);
                 }
-
             }
             return null;
         }
@@ -1043,37 +1080,40 @@
                 if(url.endsWith("?raw") && !url.endsWith("/?raw")) {
                     url = url.substring(0, url.lastIndexOf("?raw")) + "/?raw";
                 }
+                
+                // Check the cache for ongoing fetches for this URL
                 let cachedDom = WPMv2.domCache.get(url);
-
                 if (cachedDom != null) {
+                    cachedDom = await cachedDom;
                     if (Date.now() - cachedDom.timestamp < WPMv2.cacheTimeout) {
                         return cachedDom.dom;
                     }
                 }
 
-                let response = await fetch(url, {credentials: 'same-origin'});
+                // No ongoing fetches, start one
+                let fetcherPromise = (async function fetchDOMPromise(){
+                    let response = await fetch(url, {credentials: 'same-origin'});
+                    if(response != null) {
+                        let documentText = await response.text();
 
-                if(response != null) {
-
-                    let documentText = await response.text();
-
-                    let parsedDom = WPMv2.parser.parseFromString(documentText, "text/html");
-
-                    if (parsedDom.readyState === "loading") {
-                        await new Promise((resolve, reject) => {
-                            parsedDom.addEventListener("DOMContentLoaded", () => {
-                                resolve();
+                        let parsedDom = WPMv2.parser.parseFromString(documentText, "text/html");
+                        if (parsedDom.readyState === "loading") {
+                            await new Promise((resolve, reject) => {
+                                parsedDom.addEventListener("DOMContentLoaded", () => {
+                                    resolve();
+                                });
                             });
-                        });
+                        }
+
+                        return {
+                            dom: parsedDom,
+                            timestamp: Date.now()
+                        };
                     }
-
-                    WPMv2.domCache.set(url, {
-                        dom: parsedDom,
-                        timestamp: Date.now()
-                    });
-
-                    return parsedDom;
-                }
+                })();
+                WPMv2.domCache.set(url, fetcherPromise);
+                
+                return (await fetcherPromise).dom;
             }
 
             console.error("Unable to fetchDOM from: ", url);
@@ -1550,8 +1590,8 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
-        version: 2.33,
-        revision: "$Id: WPMv2.js 989 2022-12-16 10:37:55Z au182811@uni.au.dk $",
+        version: 2.35,
+        revision: "$Id: WPMv2.js 1008 2023-03-02 09:05:48Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
