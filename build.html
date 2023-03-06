@@ -444,17 +444,19 @@
             async function addPackage(wpmPackage) {
                 //Check if package is in local dom
                 let localPackageDom = document.querySelector(".packages .package#" + wpmPackage.name + ", wpm-package#" + wpmPackage.name);
+                let repoOverride = wpmPackage.repository;
                 if(localPackageDom != null) {
                     //Local package exists, override repository with local ? This breaks dependencies that are "same repository", since they now lookup on the local repository.
                     //Not setting local repository, makes the update from dom, happen on the non embedded version, which is also wrong?
                     //wpmPackage.repository = WPMv2.getLocalRepositoryURL();
+                    repoOverride = WPMv2.getLocalRepositoryURL();
                 }
 
                 let name = WPMv2.getName(wpmPackage);
                 if(!alreadySorting.includes(name)){
                     alreadySorting.push(name);
                     try {
-                        wpmPackage = await WPMv2.getLatestPackageFromPackage(wpmPackage);
+                        wpmPackage = await WPMv2.getLatestPackageFromPackage(wpmPackage, repoOverride);
                         let dependencies = await WPMv2.findAllDependencies(wpmPackage);
 
                         for(let dependency of dependencies) {
@@ -925,8 +927,12 @@
          * @param {WPMv2.WPMPackage} p - The package to update package data for
          * @returns {Promise<WPMv2.WPMPackage>}
          */
-        static async getLatestPackageFromPackage(p) {
-            let packageDOM = await WPMv2.getPackageDOM(p.repository, p.name);
+        static async getLatestPackageFromPackage(p, repoOverride=null) {
+            let fetchRepository = p.repository;
+            if(repoOverride != null) {
+                fetchRepository = repoOverride;
+            }
+            let packageDOM = await WPMv2.getPackageDOM(fetchRepository, p.name);
 
             let updatedPackage = WPMv2.getWPMPackageFromDOM(packageDOM);
 
@@ -1611,7 +1617,7 @@
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
         version: 2.36,
-        revision: "$Id: WPMv2.js 1010 2023-03-06 14:13:51Z au182811@uni.au.dk $",
+        revision: "$Id: WPMv2.js 1011 2023-03-06 14:15:36Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
