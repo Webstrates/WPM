@@ -873,7 +873,9 @@
             }
 
             let packageDOM = packageDOMSource.cloneNode(true);
-            packageDOM.setAttribute("data-repository", repository);
+            if(!packageDOM.hasAttribute("data-repository")) {
+                packageDOM.setAttribute("data-repository", repository);
+            }
 
             return packageDOM;
         }
@@ -1298,8 +1300,6 @@
         }
 
         static notifyRemove(packageName, packageDom) {
-            console.log("Removed package: ", packageName);
-
             let event = new CustomEvent("wpm.packageRemoved", {detail: packageName});
             packageDom.dispatchEvent(event);
 
@@ -1597,8 +1597,8 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
-        version: 2.36,
-        revision: "$Id: WPMv2.js 1011 2023-03-06 14:15:36Z au182811@uni.au.dk $",
+        version: 2.37,
+        revision: "$Id: WPMv2.js 1012 2023-03-06 14:27:03Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
