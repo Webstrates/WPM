@@ -426,7 +426,8 @@
                 //Check if package is in local dom
                 let localPackageDom = document.querySelector(".packages .package#" + wpmPackage.name + ", wpm-package#" + wpmPackage.name);
                 if(localPackageDom != null) {
-                    //Local package exists, override repository with local ?, maybee not?
+                    //Local package exists, override repository with local ? This breaks dependencies that are "same repository", since they now lookup on the local repository.
+                    //Not setting local repository, makes the update from dom, happen on the non embedded version, which is also wrong?
                     //wpmPackage.repository = WPMv2.getLocalRepositoryURL();
                 }
 
@@ -1591,7 +1592,7 @@
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
         version: 2.36,
-        revision: "$Id: WPMv2.js 1009 2023-03-06 13:57:48Z au182811@uni.au.dk $",
+        revision: "$Id: WPMv2.js 1010 2023-03-06 14:13:51Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
