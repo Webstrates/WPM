@@ -426,8 +426,8 @@
                 //Check if package is in local dom
                 let localPackageDom = document.querySelector(".packages .package#" + wpmPackage.name + ", wpm-package#" + wpmPackage.name);
                 if(localPackageDom != null) {
-                    //Local package exists, override repository with local ?
-                    wpmPackage.repository = WPMv2.getLocalRepositoryURL();
+                    //Local package exists, override repository with local ?, maybee not?
+                    //wpmPackage.repository = WPMv2.getLocalRepositoryURL();
                 }
 
                 let name = WPMv2.getName(wpmPackage);
@@ -613,7 +613,7 @@
             }
 
             const completePackageTreeSorted = await WPMv2.findCompletePackageTreeSorted(packages, defaultOptions, overrideOptions);
-            
+
             if (packages.length === 0) {
                 return;
             }
@@ -1590,8 +1590,8 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
-        version: 2.35,
-        revision: "$Id: WPMv2.js 1008 2023-03-02 09:05:48Z au182811@uni.au.dk $",
+        version: 2.36,
+        revision: "$Id: WPMv2.js 1009 2023-03-06 13:57:48Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
