@@ -1367,8 +1367,11 @@
                 } else {
                     currentAliases = JSON.parse(sessionStorage.getItem(WPM_ALIASES));
                 }
-            } catch (ex){}
-            if (currentAliases != null || typeof currentAliases !== "object"){
+            } catch (ex){
+                console.error(ex);
+            }
+            if (currentAliases == null || typeof currentAliases !== "object"){
+                console.log(currentAliases);
                 currentAliases = {};
             }
 
@@ -1597,8 +1600,8 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
-        version: 2.37,
-        revision: "$Id: WPMv2.js 1012 2023-03-06 14:27:03Z au182811@uni.au.dk $",
+        version: 2.38,
+        revision: "$Id: WPMv2.js 1013 2023-03-07 11:21:37Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
