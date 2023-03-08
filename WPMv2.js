@@ -1608,8 +1608,9 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
-        version: 2.40,
-        revision: "$Id: WPMv2.js 1017 2023-03-08 12:02:45Z au182811@uni.au.dk $",
+        getLocalRepositoryURL: WPMv2.getLocalRepositoryURL,
+        version: 2.41,
+        revision: "$Id: WPMv2.js 1018 2023-03-08 13:16:54Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
