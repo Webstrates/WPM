@@ -950,7 +950,9 @@
             let dom = await WPMv2.fetchDom(repositoryUrl);
 
             dom.querySelectorAll(".packages .package, wpm-package").forEach(function (v) {
-                v.setAttribute("data-repository", repositoryUrl);
+                if(!v.hasAttribute("data-repository")) {
+                    v.setAttribute("data-repository", repositoryUrl);
+                }
                 packages.push(WPMv2.getWPMPackageFromDOM(v));
             });
 
@@ -1610,7 +1612,7 @@
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
         getLocalRepositoryURL: WPMv2.getLocalRepositoryURL,
         version: 2.41,
-        revision: "$Id: WPMv2.js 1018 2023-03-08 13:16:54Z au182811@uni.au.dk $",
+        revision: "$Id: WPMv2.js 1019 2023-03-08 13:22:10Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
