@@ -606,7 +606,8 @@
             const defaultOptions = {
                 repository: WPMv2.getLocalRepositoryURL(),
                 appendMethod: "append",
-                appendTarget: null
+                appendTarget: null,
+                bootstrap: true
             };
 
             //Make sure we dont override package
@@ -780,10 +781,12 @@
 
                         //Check if package is live
                         if (packageDom.getAttribute("transient-wpm-live") == null) {
-                            //Make package live
-                            await WPMv2.bootstrap(packageDom, overrideOptions, requireToken, !alreadyInstalled);
+                            if(pkg.bootstrap) {
+                                //Make package live
+                                await WPMv2.bootstrap(packageDom, overrideOptions, requireToken, !alreadyInstalled);
 
-                            packageDom.setAttribute("transient-wpm-live", "");
+                                packageDom.setAttribute("transient-wpm-live", "");
+                            }
                         } else {
                             //Already live
                         }
@@ -1472,11 +1475,13 @@
             this.appendMethod = "append";
             this.appendTarget = null;
 
+            this.bootstrap = true;
+
             this.updateFromJson(descriptorJson);
         }
 
         updateFromOptions(options) {
-            ["appendMethod", "appendTarget", "repository"].forEach((optionProperty)=>{
+            ["appendMethod", "appendTarget", "repository", "bootstrap"].forEach((optionProperty)=>{
                 if(options.hasOwnProperty(optionProperty)) {
                     this[optionProperty] = options[optionProperty];
                 }
@@ -1600,8 +1605,8 @@
         unregisterRepository: WPMv2.unregisterRepository,
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
-        version: 2.38,
-        revision: "$Id: WPMv2.js 1013 2023-03-07 11:21:37Z au182811@uni.au.dk $",
+        version: 2.39,
+        revision: "$Id: WPMv2.js 1016 2023-03-08 10:58:21Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
