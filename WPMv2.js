@@ -799,7 +799,10 @@
 
             // Wait for all packages to finish installation
             await Promise.all(Array.from(packagePromiseMap.values()));
-            
+
+            //Splice the finished require away
+            runningRequiresPromiseMap.splice(runningRequiresPromiseMap.indexOf(packagePromiseMap), 1);
+
             //Only the first outer call to require, has givenAllInstalledCallbacks set to null
             if (givenRequireToken === null) {
                 let allInstalledCallbacks = allInstalledCallbacksStack.pop();
@@ -812,9 +815,6 @@
                     await allInstalledCallback();
                 }
                 console.timeEnd(allInstalledTimerId);
-
-                //Splice the finished require away
-                runningRequiresPromiseMap.splice(runningRequiresPromiseMap.indexOf(packagePromiseMap), 1);
             }
         }
 
@@ -1611,8 +1611,8 @@
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
         getLocalRepositoryURL: WPMv2.getLocalRepositoryURL,
-        version: 2.41,
-        revision: "$Id: WPMv2.js 1019 2023-03-08 13:22:10Z au182811@uni.au.dk $",
+        version: 2.42,
+        revision: "$Id: WPMv2.js 1023 2023-03-14 10:02:57Z au182811@uni.au.dk $",
         test: WPMv2
     };
     
