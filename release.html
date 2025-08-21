@@ -10,7 +10,7 @@
     ],
     "license": "Apache 2.0",
     "assets": [],
-    "version": "2.22",
+    "version": "2.42",
     "forceEmbedding": true
 }
 
@@ -42,7 +42,13 @@
 //Encapsulate WPMv2, so we can decide which methods are public
 ((window) => {
 
+    const WPM_ALIASES = "WPM.repoAliases";
+
+    let runningRequiresPromiseMap = [];
+
     let allInstalledCallbacksStack = [];
+
+    const requireQueue = [];
 
     /**
      * WebstratePackageManager version 2
@@ -62,7 +68,6 @@
         static async bootstrap(packageDom, options, requireToken, triggerOnPackageInstalled = false) {
             let wpmPackage = WPMv2.getWPMPackageFromDOM(packageDom);
             let promises = [];
-            let alreadyLoadedExternals = new Set();
 
             /**
              * @class WPMInterface
@@ -273,37 +278,38 @@
                 for(let url of urls) {
 
                     let promise = new Promise(async (resolve, reject)=>{
+                        try {
+                            let response = await fetch(url, {credentials: 'same-origin'});
 
-                        let response = await fetch(url, {credentials: 'same-origin'});
-
-                        let contentType = response.headers.get("Content-Type").trim();
-                        let indexOfSemicolon = contentType.indexOf(";");
-                        if(indexOfSemicolon !== -1) {
-                            contentType = contentType.substring(0, indexOfSemicolon).trim();
-                        }
-
-                        switch(contentType) {
-                            case "text/css":
-                            {
-                                await loadExternalCSS(response);
-                                break;
+                            let contentType = response.headers.get("Content-Type").trim();
+                            let indexOfSemicolon = contentType.indexOf(";");
+                            if (indexOfSemicolon !== -1) {
+                                contentType = contentType.substring(0, indexOfSemicolon).trim();
                             }
-                            case "text/javascript":
-                            case "application/javascript":
-                            case "application/x-javascript":
-                            {
-                                await loadExternalJS(response);
-                                break;
+
+                            switch (contentType) {
+                                case "text/css": {
+                                    await loadExternalCSS(response);
+                                    break;
+                                }
+                                case "text/javascript":
+                                case "application/javascript":
+                                case "application/x-javascript": {
+                                    await loadExternalJS(response);
+                                    break;
+                                }
+                                default:
+                                    console.warn("Unhandled contentType:", contentType, url);
+                                    console.warn("Loading unknown as JS for know. please report...")
+                                    await loadExternalJS(response);
                             }
-                            default:
-                                console.warn("Unhandled contentType:", contentType, url);
-                                console.warn("Loading unknown as JS for know. please report...")
-                                await loadExternalJS(response);
+                            resolve();
+                        } catch(e) {
+                            reject("Unable to fetch: "+url);
                         }
-                        resolve();
                     });
 
-                    promises.push(promise);
+                    //promises.push(promise);
 
                     await promise;
                 }
@@ -322,6 +328,8 @@
                 } else {
                     scriptContent = script.innerText;
                 }
+                
+                scriptContent = 'try{'+scriptContent+'} catch (ex){console.error("Bootstrap runtime error in '+packageDom.getAttribute("id").replaceAll("'","")+':", ex);}';
 
                 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
@@ -343,10 +351,7 @@
                     let wpmEval = new AsyncFunction(...functionArgs, scriptContent);
                     await wpmEval(...functionArgValues);
                 } catch (e) {
-                    console.groupCollapsed("Bootstrap error in " + packageDom.getAttribute("id"));
-                    console.log(scriptContent);
-                    console.groupEnd();
-                    console.error(e);
+                    console.error("Bootstrap parse error in " + packageDom.getAttribute("id"), e);
                 }
             }
 
@@ -415,34 +420,57 @@
                 packages = [packages];
             }
 
+            let alreadySorting = [];
             let convertedPackages = [];
 
             async function addRepo(repoUrl, options) {
                 if(overrideOptions.repository != null) {
                     console.warn("Adding a full repository, does not atm support overriding options for repository...");
                 }
-                let packages = await WPMv2.getPackagesFromRepository(repoUrl);
-                for(let pkg of packages) {
-                    if(options != null) {
-                        pkg.updateFromOptions(options);
+                
+                try {
+                    let packages = await WPMv2.getPackagesFromRepository(repoUrl);
+                    for(let pkg of packages) {
+                        if(options != null) {
+                            pkg.updateFromOptions(options);
+                        }
+                        await addPackage(pkg);
                     }
-                    await addPackage(pkg);
+                } catch (ex){
+                    console.error("WPMv2 very important error: Could not resolve repository. This will probably cause the site to fail horribly! ", repoUrl, ex);
                 }
             }
 
             async function addPackage(wpmPackage) {
-                if(!WPMv2.hasPackage(convertedPackages, wpmPackage)) {
-                    wpmPackage = await WPMv2.getLatestPackageFromPackage(wpmPackage);
-                    let dependencies = await WPMv2.findAllDependencies(wpmPackage);
+                //Check if package is in local dom
+                let localPackageDom = document.querySelector(".packages .package#" + wpmPackage.name + ", wpm-package#" + wpmPackage.name);
+                let repoOverride = wpmPackage.repository;
+                if(localPackageDom != null) {
+                    //Local package exists, override repository with local ? This breaks dependencies that are "same repository", since they now lookup on the local repository.
+                    //Not setting local repository, makes the update from dom, happen on the non embedded version, which is also wrong?
+                    //wpmPackage.repository = WPMv2.getLocalRepositoryURL();
+                    repoOverride = WPMv2.getLocalRepositoryURL();
+                }
 
-                    for(let dependency of dependencies) {
-                        await addPackage(dependency);
+                let name = WPMv2.getName(wpmPackage);
+                if(!alreadySorting.includes(name)){
+                    alreadySorting.push(name);
+                    try {
+                        wpmPackage = await WPMv2.getLatestPackageFromPackage(wpmPackage, repoOverride);
+                        let dependencies = await WPMv2.findAllDependencies(wpmPackage, Object.assign({}, overrideOptions));
+
+                        for(let dependency of dependencies) {
+                            await addPackage(dependency);
+                        }
+                        convertedPackages.push(wpmPackage);
+                    } catch (ex){
+                        console.error("WPMv2 very important error: Could not resolve package. This will probably cause the site to fail horribly! ", wpmPackage, ex);
                     }
-                    convertedPackages.push(wpmPackage);
                 }
             }
-
-            for(let pkg of packages) {
+            
+            // Resolve all the packages
+            await Promise.all(packages.map(async (pkg)=>{
                 let wpmPackage = null;
                 if (pkg instanceof WPMPackage) {
                     //Already a WPMPackage
@@ -452,6 +480,7 @@
                     if(pkg.startsWith("http") || (pkg.startsWith("/") && pkg.indexOf(" ") === 0)) {
                         //Full repository, http(s)://myrepourl or /my-relative-url
                         await addRepo(pkg);
+                        return;
                     } else {
                         //Single package, name or including repository
                         let split = pkg.split(" ");
@@ -484,6 +513,7 @@
                     } else if(pkg.repository != null) {
                         //Full repo, add all
                         await addRepo(pkg.repository, pkg);
+                        return;
                     }
                 }
 
@@ -492,7 +522,7 @@
                 } else {
                     console.log("Was null:", pkg);
                 }
-            }
+            }));
 
             const sortedPackages = [];
             let lastLength = convertedPackages.length;
@@ -539,11 +569,12 @@
          * @returns {Promise<WPMv2.WPMPackage[]>}
          * @private
          */
-        static async findAllDependencies(pkg) {
+        static async findAllDependencies(pkg, overrideOptions = {}) {
             let dependencies = [];
 
             for(let dependencyEntry of pkg.dependencyMap) {
                 let dependency = new WPMPackage(dependencyEntry[0], dependencyEntry[1]);
+                dependency.updateFromOptions(overrideOptions);
                 dependencies.push(dependency);
             }
 
@@ -556,23 +587,8 @@
          */
         static hasPackage(packages, searchPackage) {
             return packages.find((pkg)=>{
-                let pkgName = null;
-                let searchPackageName = null;
-                if(pkg instanceof WPMPackage) {
-                    pkgName = pkg.name;
-                } else if(pkg.package != null) {
-                    pkgName = pkg.package;
-                } else {
-                    console.warn("Unable to infer package name from:", pkg);
-                }
-
-                if(searchPackage instanceof WPMPackage) {
-                    searchPackageName = searchPackage.name;
-                } else if(searchPackage.package != null) {
-                    searchPackageName = searchPackage.package;
-                } else {
-                    console.warn("Unable to infer package name from:", searchPackage);
-                }
+                let pkgName = WPMv2.getName(pkg);
+                let searchPackageName = WPMv2.getName(searchPackage);
 
                 if(pkgName == null || searchPackageName == null) {
                     console.warn("Unable to compare as one was null");
@@ -581,6 +597,17 @@
 
                 return pkgName === searchPackageName;
             }) != null;
+        }
+        
+        static getName(searchPackage){
+            if(searchPackage instanceof WPMPackage) {
+                return searchPackage.name;
+            } else if(searchPackage.package != null) {
+                return searchPackage.package;
+            } else {
+                console.warn("Unable to infer package name from:", searchPackage);
+                return null;
+            }            
         }
 
         /**
@@ -599,7 +626,8 @@
             const defaultOptions = {
                 repository: WPMv2.getLocalRepositoryURL(),
                 appendMethod: "append",
-                appendTarget: null
+                appendTarget: null,
+                bootstrap: true
             };
 
             //Make sure we dont override package
@@ -625,140 +653,174 @@
                 console.time(requireTimerId);
             }
 
+            // Schedule all the package promises in parallel, but keep track of package inter-dependencies too
+            let packagePromiseMap = new Map();
+
+            //Save the currently running require
+            runningRequiresPromiseMap.push(packagePromiseMap);
+
             for (let pkg of completePackageTreeSorted) {
+                // At this point, since the tree is sorted, a dependency is either hard and supposed to be in the tree or soft and maybe in the tree (if not, then not installed)
+                // If the depedency is hard and not in the tree then a missing package error has already happened and we are going by best-effort anyways, so ignore this case.
 
-                let options = Object.assign({}, defaultOptions, pkg.getPackageOptions(), overrideOptions);
-
-                //Check if package is in dom
-                let packageDom = document.querySelector(".packages .package#" + pkg.name + ", wpm-package#" + pkg.name);
-
-                let alreadyInstalled = false;
-
-                let wpmPackage = null;
-
-                let needsAppending = false;
-
-                if (packageDom == null) {
-                    //We need to fetch and install package to dom
-                    let fetchedPackageDom = await WPMv2.getPackageDOM(pkg.repository, pkg.name);
-
-                    //Rewrite packageDom to a wpm-package
-                    packageDom = document.createElement("wpm-package");
-
-                    for (let index = fetchedPackageDom.attributes.length - 1; index > -1; --index) {
-                        let attribute = fetchedPackageDom.attributes[index];
-                        packageDom.setAttribute(attribute.name, attribute.value);
+                //Check for another require already promising to install this package
+                let foundPromise = null;
+                for(let promiseMap of runningRequiresPromiseMap) {
+                    if(promiseMap.has(pkg.name)) {
+                        //Use other require promise, to tell us when package is installed
+                        foundPromise = promiseMap.get(pkg.name);
+                        break;
                     }
-
-                    // Instead of display:none, hide it otherwise due to Chrome bug for SVGs
-                    packageDom.style.width = 0;
-                    packageDom.style.height = 0;
-                    packageDom.style.position = "absolute";
-                    packageDom.style.visibility = "hidden";
-
-                    Array.from(fetchedPackageDom.children).forEach((child) => {
-                        packageDom.appendChild(child);
-                    });
-
-                    WPMv2.stripProtection(packageDom);
-
-                    wpmPackage = WPMv2.getWPMPackageFromDOM(packageDom);
-
-                    needsAppending = true;
-                } else {
-                    wpmPackage = WPMv2.getWPMPackageFromDOM(packageDom);
-                    alreadyInstalled = true;
                 }
 
-                //Install into page
-                if(needsAppending) {
-                    let appendTarget = options.appendTarget;
+                if(foundPromise != null) {
+                    packagePromiseMap.set(pkg.name, foundPromise);
+                } else {
 
-                    if(typeof appendTarget === "string") {
-                        appendTarget = document.querySelector(appendTarget);
-                    }
+                    packagePromiseMap.set(pkg.name, async function multithreadedFetchPackage() {
+                        // Lookup all hard and optional dependencies and wait for them before starting ours
+                        await Promise.all([...pkg.dependencyMap.keys(), ...pkg.optionalDependencyMap.keys()].map((dependency) => {
+                            return packagePromiseMap.get(dependency);
+                        }));
 
-                    if (appendTarget == null) {
-                        appendTarget = document.createElement("div");
-                        appendTarget.setAttribute("transient-element", "");
-                        appendTarget.setAttribute("transient-wpmid", packageDom.id);
-                        document.head.appendChild(appendTarget);
-                    }
+                        // Install this package
+                        let options = Object.assign({}, defaultOptions, pkg.getPackageOptions(), overrideOptions);
 
-                    switch (options.appendMethod.toLowerCase()) {
-                        case "before":
-                            appendTarget.parentNode.insertBefore(packageDom, appendTarget);
-                            break;
+                        //Check if package is in dom
+                        let packageDom = document.querySelector(".packages .package#" + pkg.name + ", wpm-package#" + pkg.name);
 
-                        case "after":
-                            appendTarget.parentNode.insertBefore(packageDom, appendTarget.nextSibling);
-                            break;
-                        case "prepend":
-                            appendTarget.prepend(packageDom);
-                            break;
+                        let alreadyInstalled = false;
 
-                        case "append":
-                        default:
-                            appendTarget.append(packageDom);
-                    }
+                        let wpmPackage = null;
 
-                    // POST all assets to the target
-                    if (wpmPackage.assets.length > 0) {
-                        let repoAssetsUrl = wpmPackage.repository.substring(0, wpmPackage.repository.indexOf("?")) + "?assets&latest";
-                        let repoAssets = await WPMv2.fetchAssets(repoAssetsUrl);
+                        let needsAppending = false;
 
-                        let localAssetsUrl = location.pathname + "?assets&latest";
-                        let localAssets = await WPMv2.fetchAssets(localAssetsUrl);
+                        if (packageDom == null) {
+                            //We need to fetch and install package to dom
+                            let fetchedPackageDom = await WPMv2.getPackageDOM(pkg.repository, pkg.name);
 
-                        let formData = new FormData();
-                        let assetPromises = [];
-                        wpmPackage.assets.forEach(function (asset) {
-                            //If we already have same filehash of this asset, skip
-                            let localAsset = localAssets.get(asset);
-                            let repoAsset = repoAssets.get(asset);
+                            //Rewrite packageDom to a wpm-package
+                            packageDom = document.createElement("wpm-package");
 
-                            if(localAsset != null && repoAsset != null && localAsset.fileHash === repoAsset.fileHash) {
-                                return;
+                            for (let index = fetchedPackageDom.attributes.length - 1; index > -1; --index) {
+                                let attribute = fetchedPackageDom.attributes[index];
+                                packageDom.setAttribute(attribute.name, attribute.value);
                             }
 
-                            assetPromises.push(new Promise(async function (resolve, reject) {
-                                // Construct URL
-                                let assetUrl = wpmPackage.repository.substring(0, wpmPackage.repository.indexOf("?"));
-                                if (!assetUrl.endsWith("/")) {
-                                    assetUrl += "/";
-                                }
-                                assetUrl += asset;
+                            // Instead of display:none, hide it otherwise due to Chrome bug for SVGs
+                            packageDom.style.width = 0;
+                            packageDom.style.height = 0;
+                            packageDom.style.position = "absolute";
+                            packageDom.style.visibility = "hidden";
 
-                                // Fetch it and append to POST
-                                let response = await fetch(assetUrl, {credentials: 'same-origin'});
-                                let blob = await response.blob();
-                                formData.append("file", blob, asset);
-                                resolve();
-                            }));
-                        });
-
-                        if(assetPromises.length > 0) {
-                            await Promise.all(assetPromises);
-
-                            await fetch(location.pathname, {
-                                body: formData,
-                                credentials: 'same-origin',
-                                method: "post"
+                            Array.from(fetchedPackageDom.children).forEach((child) => {
+                                packageDom.appendChild(child);
                             });
+
+                            WPMv2.stripProtection(packageDom);
+
+                            wpmPackage = WPMv2.getWPMPackageFromDOM(packageDom);
+
+                            needsAppending = true;
+                        } else {
+                            wpmPackage = WPMv2.getWPMPackageFromDOM(packageDom);
+                            alreadyInstalled = true;
                         }
-                    }
-                }
 
-                //Check if package is live
-                if (packageDom.getAttribute("transient-wpm-live") == null) {
-                    //Make package live
-                    await WPMv2.bootstrap(packageDom, overrideOptions, requireToken, !alreadyInstalled);
+                        //Install into page
+                        if (needsAppending) {
+                            let appendTarget = options.appendTarget;
 
-                    packageDom.setAttribute("transient-wpm-live", "");
-                } else {
-                    //Already live
+                            if (typeof appendTarget === "string") {
+                                appendTarget = document.querySelector(appendTarget);
+                            }
+
+                            if (appendTarget == null) {
+                                appendTarget = document.createElement("div");
+                                appendTarget.setAttribute("transient-element", "");
+                                appendTarget.setAttribute("transient-wpmid", packageDom.id);
+                                document.head.appendChild(appendTarget);
+                            }
+
+                            switch (options.appendMethod.toLowerCase()) {
+                                case "before":
+                                    appendTarget.parentNode.insertBefore(packageDom, appendTarget);
+                                    break;
+
+                                case "after":
+                                    appendTarget.parentNode.insertBefore(packageDom, appendTarget.nextSibling);
+                                    break;
+                                case "prepend":
+                                    appendTarget.prepend(packageDom);
+                                    break;
+
+                                case "append":
+                                default:
+                                    appendTarget.append(packageDom);
+                            }
+
+                            // POST all assets to the target
+                            if (wpmPackage.assets.length > 0) {
+                                let repoAssetsUrl = WPMv2.lookupRepoAlias(wpmPackage.repository);
+                                let repoAssets = await WPMv2.fetchAssets(repoAssetsUrl);
+
+                                let localAssetsUrl = location.pathname + "?assets&latest";
+                                let localAssets = await WPMv2.fetchAssets(localAssetsUrl);
+
+                                let formData = new FormData();
+                                let assetPromises = [];
+                                wpmPackage.assets.forEach(function (asset) {
+                                    //If we already have same filehash of this asset, skip
+                                    let localAsset = localAssets.get(asset);
+                                    let repoAsset = repoAssets.get(asset);
+
+                                    if (localAsset != null && repoAsset != null && localAsset.fileHash === repoAsset.fileHash) {
+                                        return;
+                                    }
+
+                                    assetPromises.push(new Promise(async function (resolve, reject) {
+                                        let blob = await WPMv2.fetchAsset(repoAssetsUrl, asset);
+
+                                        // Fetch it and append to POST
+                                        formData.append("file", blob, asset);
+                                        resolve();
+                                    }));
+                                });
+
+                                if (assetPromises.length > 0) {
+                                    await Promise.all(assetPromises);
+
+                                    await fetch(location.pathname, {
+                                        body: formData,
+                                        credentials: 'same-origin',
+                                        method: "post"
+                                    });
+                                }
+                            }
+                        }
+
+                        //Check if package is live
+                        if (packageDom.getAttribute("transient-wpm-live") == null) {
+                            if(pkg.bootstrap) {
+                                //Make package live
+                                await WPMv2.bootstrap(packageDom, overrideOptions, requireToken, !alreadyInstalled);
+
+                                packageDom.setAttribute("transient-wpm-live", "");
+                            } else {
+                                //Ignore
+                            }
+                        } else {
+                            //Already live
+                        }
+                    }());
                 }
             }
+
+            // Wait for all packages to finish installation
+            await Promise.all(Array.from(packagePromiseMap.values()));
+
+            //Splice the finished require away
+            runningRequiresPromiseMap.splice(runningRequiresPromiseMap.indexOf(packagePromiseMap), 1);
 
             //Only the first outer call to require, has givenAllInstalledCallbacks set to null
             if (givenRequireToken === null) {
@@ -822,7 +884,13 @@
          * @ignore
          */
         static async getPackageDOM(repository, packageName) {
-            let dom = await WPMv2.fetchDom(repository);
+            let dom = null;
+
+            if(repository == this.getLocalRepositoryURL()) {
+                dom = document.querySelector("html");
+            } else {
+                dom = await WPMv2.fetchDom(repository);
+            }
 
             let packageDOMSource = dom.querySelector(".packages .package#" + packageName + ", wpm-package#" + packageName);
             if (packageDOMSource === null) {
@@ -830,7 +898,9 @@
             }
 
             let packageDOM = packageDOMSource.cloneNode(true);
-            packageDOM.setAttribute("data-repository", repository);
+            if(!packageDOM.hasAttribute("data-repository")) {
+                packageDOM.setAttribute("data-repository", repository);
+            }
 
             return packageDOM;
         }
@@ -865,8 +935,12 @@
          * @param {WPMv2.WPMPackage} p - The package to update package data for
          * @returns {Promise<WPMv2.WPMPackage>}
          */
-        static async getLatestPackageFromPackage(p) {
-            let packageDOM = await WPMv2.getPackageDOM(p.repository, p.name);
+        static async getLatestPackageFromPackage(p, repoOverride=null) {
+            let fetchRepository = p.repository;
+            if(repoOverride != null) {
+                fetchRepository = repoOverride;
+            }
+            let packageDOM = await WPMv2.getPackageDOM(fetchRepository, p.name);
 
             let updatedPackage = WPMv2.getWPMPackageFromDOM(packageDOM);
 
@@ -887,7 +961,7 @@
          * });
          *
          * @param {String} repositoryUrl the repository to search
-         * @returns {WPMv2.WPMPackage[]} the packages found
+         * @returns {Promise<WPMv2.WPMPackage[]>} the packages found
          */
         static async getPackagesFromRepository(repositoryUrl) {
             let packages = [];
@@ -895,7 +969,9 @@
             let dom = await WPMv2.fetchDom(repositoryUrl);
 
             dom.querySelectorAll(".packages .package, wpm-package").forEach(function (v) {
-                v.setAttribute("data-repository", repositoryUrl);
+                if(!v.hasAttribute("data-repository")) {
+                    v.setAttribute("data-repository", repositoryUrl);
+                }
                 packages.push(WPMv2.getWPMPackageFromDOM(v));
             });
 
@@ -911,12 +987,55 @@
                 if (metadataDom != null) {
                     return JSON.parse(metadataDom.textContent);
                 }
-
             }
             return null;
         }
 
+        static async fetchAsset(url, asset) {
+            if(Array.isArray(url)) {
+                for(let u of url) {
+                    try {
+                        let fetchedAsset = await WPMv2.fetchAsset(u, asset);
+                        if(fetchedAsset != null) {
+                            return fetchedAsset;
+                        }
+                    } catch(e) {
+                        //Ignore
+                    }
+                }
+            }
+
+            let assetUrl = url.substring(0, url.indexOf("?"));
+            if (!assetUrl.endsWith("/")) {
+                assetUrl += "/";
+            }
+
+            assetUrl += asset;
+
+            let response = await fetch(assetUrl, {credentials: 'same-origin'});
+            let blob = await response.blob();
+
+            return blob;
+        }
+
         static async fetchAssets(url) {
+            if(Array.isArray(url)) {
+                for(let u of url) {
+                    try {
+                        let assets = await WPMv2.fetchAssets(u);
+                        if (assets != null) {
+                            return assets;
+                        }
+                    } catch(e) {
+                        //Ignore ?
+                    }
+                }
+            }
+
+            if(!url.endsWith("?assets&latest")) {
+                url = url.substring(0, url.indexOf("?")) + "?assets&latest";
+            }
+
             if (WPMv2.assetsCache[url] != null) {
                 if (Date.now() - WPMv2.assetsCache[url].timestamp < WPMv2.cacheTimeout) {
                     return WPMv2.assetsCache[url].assets;
@@ -945,37 +1064,96 @@
             return assetResult;
         }
 
-        static async fetchDom(url) {
-            if(url.endsWith("?raw") && !url.endsWith("/?raw")) {
-                url = url.substring(0, url.lastIndexOf("?raw")) + "/?raw";
+        static lookupRepoAlias(alias) {
+            let localStorageAliases = {};
+            let sessionStorageAliases = {};
+            try {
+                localStorageAliases = JSON.parse(localStorage.getItem(WPM_ALIASES));
+            } catch (ex){
+                console.warn("Unparseable localStorage.repositoryAliases", ex);
+            }
+            try {
+                sessionStorageAliases = JSON.parse(sessionStorage.getItem(WPM_ALIASES));
+            } catch (ex){
+                console.warn("Unparseable sessionStorage.repositoryAliases", ex);
             }
 
-            if (WPMv2.domCache[url] != null) {
-                if (Date.now() - WPMv2.domCache[url].timestamp < WPMv2.cacheTimeout) {
-                    return WPMv2.domCache[url].dom;
+            if(localStorageAliases?.hasOwnProperty(alias)) {
+                let result = localStorageAliases[alias];
+                return result;
+            } else if(sessionStorageAliases?.hasOwnProperty(alias)) {
+                let result = sessionStorageAliases[alias];
+                return result;
+            } else {
+                //Check if alias might be an url already?
+                if(alias.startsWith("http") || alias.startsWith("/")) {
+                    //Probabely an url
+                    return alias;
                 }
             }
 
-            let response = await fetch(url, {credentials: 'same-origin'});
+            return ["/"+alias+"/?raw", "/"+alias+"/index.html"];
+        }
 
-            let documentText = await response.text();
+        static async fetchDom(url) {
+            //Lookup repos aliases
+            url = WPMv2.lookupRepoAlias(url);
 
-            let parsedDom = WPMv2.parser.parseFromString(documentText, "text/html");
+            if(Array.isArray(url)) {
+                //Call again for each url in array
+                for(let u of url) {
+                    try {
+                        let fetchedDom = await this.fetchDom(u);
+                        if(fetchedDom != null) {
+                            return fetchedDom;
+                        }
+                    } catch(e) {
+                        //Ignore?
+                        console.warn(e);
+                    }
+                }
+            } else {
+                if(url.endsWith("?raw") && !url.endsWith("/?raw")) {
+                    url = url.substring(0, url.lastIndexOf("?raw")) + "/?raw";
+                }
+                
+                // Check the cache for ongoing fetches for this URL
+                let cachedDom = WPMv2.domCache.get(url);
+                if (cachedDom != null) {
+                    cachedDom = await cachedDom;
+                    if (Date.now() - cachedDom.timestamp < WPMv2.cacheTimeout) {
+                        return cachedDom.dom;
+                    }
+                }
 
-            if(parsedDom.readyState === "loading") {
-                await new Promise((resolve, reject)=>{
-                    parsedDom.addEventListener("DOMContentLoaded", ()=>{
-                        resolve();
-                    });
-                });
+                // No ongoing fetches, start one
+                let fetcherPromise = (async function fetchDOMPromise(){
+                    let response = await fetch(url, {credentials: 'same-origin'});
+                    if(response != null) {
+                        let documentText = await response.text();
+
+                        let parsedDom = WPMv2.parser.parseFromString(documentText, "text/html");
+                        if (parsedDom.readyState === "loading") {
+                            await new Promise((resolve, reject) => {
+                                parsedDom.addEventListener("DOMContentLoaded", () => {
+                                    resolve();
+                                });
+                            });
+                        }
+
+                        return {
+                            dom: parsedDom,
+                            timestamp: Date.now()
+                        };
+                    }
+                })();
+                WPMv2.domCache.set(url, fetcherPromise);
+                
+                return (await fetcherPromise).dom;
             }
 
-            WPMv2.domCache[url] = {
-                dom: parsedDom,
-                timestamp: Date.now()
-            };
-
-            return parsedDom;
+            console.error("Unable to fetchDOM from: ", url);
+            return null;
         }
 
         /**
@@ -1050,6 +1228,14 @@
          * @returns {Promise<void>} - Resolves when WPMv2 is updated
          */
         static async updateWPM(url) {
+            console.group("Updating WPM...");
+            if(url == null) {
+                console.log("No repository given for update, defaulting to \"/wpm/?raw\"");
+                url = "/wpm/?raw";
+            }
+
+            console.log("Version before update:", window.WPMv2.version);
+
             let dom = await WPMv2.fetchDom(url);
 
             let newWpm = dom.querySelector("#WPMv2-script");
@@ -1058,9 +1244,13 @@
 
             ourWpm.textContent = newWpm.textContent;
 
+            if(ourWpm.hasAttribute("src")) {
+                ourWpm.removeAttribute("src");
+                console.warn("Removed src attribute on WPMScript, now inlined instead!");
+            }
             eval.call(null, ourWpm.textContent);
-
-            console.log("WPMv2 updated!");
+            console.log("Version after update:", window.WPMv2.version);
+            console.groupEnd();
         }
 
         /**
@@ -1137,17 +1327,104 @@
         }
 
         static notifyRemove(packageName, packageDom) {
-            console.log("Removed package: ", packageName);
-
             let event = new CustomEvent("wpm.packageRemoved", {detail: packageName});
             packageDom.dispatchEvent(event);
 
             let eventAny = new CustomEvent("wpm.packageRemovedAny", {detail: packageName});
             document.dispatchEvent(eventAny);
         }
+
+        static getRegisteredRepositories(useLocalStorage) {
+            let currentAliases = null;
+
+            try {
+                if(useLocalStorage) {
+                    currentAliases = JSON.parse(localStorage.getItem(WPM_ALIASES));
+                } else {
+                    currentAliases = JSON.parse(sessionStorage.getItem(WPM_ALIASES));
+                }
+            } catch (ex){}
+            if (currentAliases == null || typeof currentAliases !== "object"){
+                currentAliases = {};
+            }
+
+            return currentAliases;
+        }
+
+        /**
+         * Registers a repository alias
+         * @param alias The alias to register
+         * @param repository The repository to register the alias to
+         * @param useLocalStorage If true, the registered alias is registered in localStorage, if not, in sessionStorage
+         */
+        static registerRepository(alias, repository, useLocalStorage = false) {
+            let currentAliases = null;
+
+            try {
+                if(useLocalStorage) {
+                    currentAliases = JSON.parse(localStorage.getItem(WPM_ALIASES));
+                } else {
+                    currentAliases = JSON.parse(sessionStorage.getItem(WPM_ALIASES));
+                }
+            } catch (ex){}
+            if (currentAliases == null || typeof currentAliases !== "object"){
+                currentAliases = {};
+            }
+
+            currentAliases[alias] = repository;
+
+            if(useLocalStorage) {
+                localStorage.setItem(WPM_ALIASES, JSON.stringify(currentAliases));
+            } else {
+                sessionStorage.setItem(WPM_ALIASES, JSON.stringify(currentAliases));
+            }
+        }
+
+        /**
+         * Unregisters a repository alias
+         * @param alias The alias to unregister
+         * @param useLocalStorage If true, the alias is removed from localStorage, if not, from sessionStorage
+         */
+        static unregisterRepository(alias, useLocalStorage = false) {
+            let currentAliases = null;
+
+            try {
+                if(useLocalStorage) {
+                    currentAliases = JSON.parse(localStorage.getItem(WPM_ALIASES));
+                } else {
+                    currentAliases = JSON.parse(sessionStorage.getItem(WPM_ALIASES));
+                }
+            } catch (ex){
+                console.error(ex);
+            }
+            if (currentAliases == null || typeof currentAliases !== "object"){
+                console.log(currentAliases);
+                currentAliases = {};
+            }
+
+            delete currentAliases[alias];
+
+            if(useLocalStorage) {
+                localStorage.setItem(WPM_ALIASES, JSON.stringify(currentAliases));
+            } else {
+                sessionStorage.setItem(WPM_ALIASES, JSON.stringify(currentAliases));
+            }
+        }
+
+        /**
+         * Clears all registered aliases from storage
+         * @param useLocalStorage If true, clears from localStorage, if not, from sessionStorage
+         */
+        static clearRegisteredRepositories(useLocalStorage = false) {
+            if(useLocalStorage) {
+                localStorage.setItem(WPM_ALIASES, "{}");
+            } else {
+                sessionStorage.setItem(WPM_ALIASES, "{}");
+            }
+        }
     }
 
-    WPMv2.domCache = {};
+    WPMv2.domCache = new Map();
     WPMv2.assetsCache = {};
     WPMv2.parser = new DOMParser();
     WPMv2.cacheTimeout = 5000;
@@ -1222,11 +1499,13 @@
             this.appendMethod = "append";
             this.appendTarget = null;
 
+            this.bootstrap = true;
+
             this.updateFromJson(descriptorJson);
         }
 
         updateFromOptions(options) {
-            ["appendMethod", "appendTarget", "repository"].forEach((optionProperty)=>{
+            ["appendMethod", "appendTarget", "repository", "bootstrap"].forEach((optionProperty)=>{
                 if(options.hasOwnProperty(optionProperty)) {
                     this[optionProperty] = options[optionProperty];
                 }
@@ -1236,7 +1515,7 @@
         getPackageOptions() {
             let options = {};
 
-            ["appendMethod", "appendTarget", "repository"].forEach((optionProperty)=>{
+            ["appendMethod", "appendTarget", "repository", "bootstrap"].forEach((optionProperty)=>{
                 options[optionProperty] = this[optionProperty];
             });
 
@@ -1325,7 +1604,7 @@
     });
 
     //Setup attribute "transient-element" that marks a DOM element as transient
-    if(webstrate != null) {
+    if(typeof webstrate !== "undefined") {
         let oldIsTransientElement = webstrate.config.isTransientElement;
         webstrate.config.isTransientElement = (node) => {
             if (node.hasAttribute("transient-element")) {
@@ -1346,8 +1625,14 @@
         getPackagesFromRepository: WPMv2.getPackagesFromRepository,
         getCurrentlyInstalledPackages: WPMv2.getCurrentlyInstalledPackages,
         getLatestPackageFromPackage: WPMv2.getLatestPackageFromPackage,
-        version: 2.24,
-        revision: "$Id: WPMv2.js 845 2022-03-28 12:55:52Z au182811@uni.au.dk $"
+        registerRepository: WPMv2.registerRepository,
+        unregisterRepository: WPMv2.unregisterRepository,
+        clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
+        getRegisteredRepositories: WPMv2.getRegisteredRepositories,
+        getLocalRepositoryURL: WPMv2.getLocalRepositoryURL,
+        version: 2.42,
+        revision: "$Id: WPMv2.js 1023 2023-03-14 10:02:57Z au182811@uni.au.dk $",
+        test: WPMv2
     };
     
     window.WPM = window.WPMv2;
@@ -1391,6 +1676,15 @@ class WPMBoot {
                 console.warn("WPM bootloader skipping incorrect requirestep, dependency list is missing", requireStep);
                 continue;
             }
+            if (requireStep.repositories){
+                if (typeof requireStep.repositories !== "object"){
+                    console.warn("WPM bootloader skipping registration of repositories because requireStep.repositories isn't an object map of name->url", requireStep);
+                } else {
+                    for (const [key, value] of Object.entries(requireStep.repositories)) {
+                        WPMv2.registerRepository(key, value);
+                    }
+                }
+            }
 
             if (requireStep.options){
                 await WPMv2.require(requireStep.dependencies, requireStep.options);
@@ -1420,9 +1714,17 @@ class WPMBoot {
         }
     }
 }
+window.WPMBoot = WPMBoot;
+
 document.querySelector("html").setAttribute("transient-wpm2-bootloader", "waiting");
-if(webstrate != null) {
+if(typeof webstrate  !== "undefined") {
+    // Webstrate mode
     webstrate.on("loaded", async function wpmv2_bootloader_loader() {
+        await WPMBoot.wpmv2_bootloader();
+    });
+} else {
+    // Standalone mode
+    document.addEventListener("DOMContentLoaded", async function(event) {
         await WPMBoot.wpmv2_bootloader();
     });
 }
@@ -1444,7 +1746,13 @@ if(webstrate != null) {
 
 </script>
 
-            <script id="WPMv2-script" src="https://cdn.jsdelivr.net/gh/Webstrates/WPM@master/WPMv2.js" type="text/javascript"></script>
+            <script id="WPMv2-script">
+                const request = new XMLHttpRequest();
+                request.open('GET', 'https://raw.githubusercontent.com/Webstrates/WPM/master/WPMv2.js', false);
+                request.send(null);
+                if(!(request.status===200)) throw new Error("Cannot load WPMv2");
+                eval(request.responseText);                
+            </script>
         </wpm-package>    
         <wpm-package id="WPM-loading-skin-simple">
             <script id="descriptor-script" type="descriptor">
@@ -1461,6 +1769,9 @@ if(webstrate != null) {
 </script>
 
             <style id="loading-style">
+html:not([transient-wpm2-bootloader="loaded"]) > * {
+  opacity: 0 !important; }
+
 @keyframes wpm-bootloader-spin {
   from {
     transform: translate(-50%, -50%) rotate(0); }
@@ -1481,7 +1792,7 @@ if(webstrate != null) {
     opacity: 0;
     filter: blur(2em); } }
 
-body[transient-wpm2-bootloader="waiting"]:before, body[transient-wpm2-bootloader="loading"]:before, body[transient-wpm2-bootloader="loaded"]:before {
+html[transient-wpm2-bootloader="waiting"]:before, html[transient-wpm2-bootloader="loading"]:before, html[transient-wpm2-bootloader="initializing"]:before, html[transient-wpm2-bootloader="loaded"]:before {
   animation: wpm-bootloader-spin 1s infinite linear both;
   content: "";
   position: fixed;
@@ -1495,12 +1806,10 @@ body[transient-wpm2-bootloader="waiting"]:before, body[transient-wpm2-bootloader
   border-top-color: rgba(0, 102, 255, 0.589);
   border-bottom-color: rgba(11, 90, 21, 0.466);
   box-shadow: 0 0 2em rgba(49, 60, 162, 0.446);
-  pointer-events: none; }
+  pointer-events: none;
+  z-index: 9999; }
 
-body[transient-wpm2-bootloader="waiting"]:not([transient-wpm2-bootloader="loaded"]) > *, body[transient-wpm2-bootloader="loading"]:not([transient-wpm2-bootloader="loaded"]) > *, body[transient-wpm2-bootloader="loaded"]:not([transient-wpm2-bootloader="loaded"]) > * {
-  opacity: 0; }
-
-body[transient-wpm2-bootloader="waiting"][transient-wpm2-bootloader="loaded"]:before, body[transient-wpm2-bootloader="loading"][transient-wpm2-bootloader="loaded"]:before, body[transient-wpm2-bootloader="loaded"][transient-wpm2-bootloader="loaded"]:before {
+html[transient-wpm2-bootloader="waiting"][transient-wpm2-bootloader="loaded"]:before, html[transient-wpm2-bootloader="loading"][transient-wpm2-bootloader="loaded"]:before, html[transient-wpm2-bootloader="initializing"][transient-wpm2-bootloader="loaded"]:before, html[transient-wpm2-bootloader="loaded"][transient-wpm2-bootloader="loaded"]:before {
   animation: wpm-bootloader-done 1s ease-out both; }
 </style>
 
