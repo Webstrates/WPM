@@ -8,7 +8,7 @@ activating them locally from the webstrate itself.
 
 To get the latest **stable** release simply include the following script in the head of your page:
 
-`<script id="WPMv2-script" src="https://cdn.jsdelivr.net/gh/Webstrates/WPM@v2.22/WPMv2.js"></script>`
+`<script id="WPMv2-script" src="https://cdn.jsdelivr.net/gh/Webstrates/WPM@v2.42/WPMv2.js"></script>`
 
 If you rather want to live on the **bleeding edge** you can add the following script to the head section of the page instead:
 
