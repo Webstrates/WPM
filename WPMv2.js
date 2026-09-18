@@ -718,7 +718,7 @@
 
                             if (appendTarget == null) {
                                 appendTarget = document.createElement("div");
-                                appendTarget.setAttribute("transient-element", "");
+                                appendTarget.setAttribute("transient", "");
                                 appendTarget.setAttribute("transient-wpmid", packageDom.id);
                                 document.head.appendChild(appendTarget);
                             }
@@ -1584,16 +1584,30 @@
         subtree: true
     });
 
-    //Setup attribute "transient-element" that marks a DOM element as transient
+    // Legacy clients: Setup the "transient" attribute that marks a DOM element as transient. 
     if(typeof webstrate !== "undefined") {
-        let oldIsTransientElement = webstrate.config.isTransientElement;
-        webstrate.config.isTransientElement = (node) => {
-            if (node.hasAttribute("transient-element")) {
-                return true;
-            }
+        let probe = document.createElement("div");
+        probe.setAttribute("transient", "");
 
-            return oldIsTransientElement(node);
-        };
+        let nativeTransient = false;
+        try {
+            nativeTransient = webstrate.config.isTransientElement(probe) === true;
+        } catch (e) {
+            //Treat a broken predicate as no native support.
+        }
+
+        if(!nativeTransient) {
+            let oldIsTransientElement = webstrate.config.isTransientElement;
+            webstrate.config.isTransientElement = (node) => {
+                if (node.nodeType === Node.ELEMENT_NODE
+                    && node !== document.documentElement
+                    && node.hasAttribute("transient")) {
+                    return true;
+                }
+
+                return oldIsTransientElement(node);
+            };
+        }
     }
 
     //WPMv2 Interface to the world!
@@ -1611,8 +1625,8 @@
         clearRegisteredRepositories: WPMv2.clearRegisteredRepositories,
         getRegisteredRepositories: WPMv2.getRegisteredRepositories,
         getLocalRepositoryURL: WPMv2.getLocalRepositoryURL,
-        version: 2.42,
-        revision: "$Id: WPMv2.js 1023 2023-03-14 10:02:57Z au182811@uni.au.dk $",
+        version: 2.43,
+        revision: "$Id: WPMv2.js 1096 2026-09-18 13:59:12Z au182865@uni.au.dk $",
         test: WPMv2
     };
     
