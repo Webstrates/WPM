@@ -1,5 +1,5 @@
 html:not([transient-wpm2-bootloader="loaded"]) > * {
-        opacity: 0 !important;
+    display: none !important;
 }
 
 html[transient-wpm2-bootloader="waiting"], html[transient-wpm2-bootloader="loading"], html[transient-wpm2-bootloader="initializing"], html[transient-wpm2-bootloader="loaded"] {
